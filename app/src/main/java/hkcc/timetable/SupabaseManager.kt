@@ -52,8 +52,8 @@ object SupabaseManager {
         Log.d("SupabaseManager", "init() called")
         try {
             _client = createSupabaseClient(
-                supabaseUrl = "https://hwzztdpusrlntnjhdsop.supabase.co",
-                supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3enp0ZHB1c3JsbnRuamhkc29wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NjQzNDYsImV4cCI6MjA5MDE0MDM0Nn0.R3k9Ssvw1F92GPg_msY0neI9lkmyEDN2-hpyan2dIIM"
+                supabaseUrl = BuildConfig.SUPABASE_URL,
+                supabaseKey = BuildConfig.SUPABASE_ANON_KEY
             ) {
                 install(Postgrest)
                 install(Realtime)

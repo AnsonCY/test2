@@ -98,8 +98,8 @@ data class Subject(
 
 fun generateColor(seed: String): Color {
     val hash = seed.hashCode()
-    val r = (hash and 0xFF0000 shr 16) / 255f
-    val g = (hash and 0x00FF00 shr 8) / 255f
+    val r = ((hash and 0xFF0000) shr 16) / 255f
+    val g = ((hash and 0x00FF00) shr 8) / 255f
     val b = (hash and 0x0000FF) / 255f
     return Color(0.4f + 0.4f * r, 0.45f + 0.4f * g, 0.5f + 0.4f * b, 1f)
 }

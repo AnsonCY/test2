@@ -1,7 +1,5 @@
 package hkcc.timetable
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Paint
@@ -131,6 +129,7 @@ fun TimetableApp(viewModel: TimetableViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val groupmateViewModel: GroupmateViewModel = viewModel()
     val showGhosting by viewModel.showGhosting.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
 
@@ -159,15 +158,15 @@ fun TimetableApp(viewModel: TimetableViewModel) {
                 }
                 HorizontalDivider()
 
-                NavigationItem("Home", Icons.Filled.Home, currentRoute == "home") { scope.launch { drawerState.close(); navController.navigate("home") } }
-                NavigationItem("Upload CSV", Icons.Filled.AddCircle, currentRoute == "upload_csv") { scope.launch { drawerState.close(); navController.navigate("upload_csv") } }
-                NavigationItem("Select Subjects", Icons.Filled.Edit, currentRoute == "select_subjects") { scope.launch { drawerState.close(); navController.navigate("select_subjects") } }
-                NavigationItem("Auto Plan", Icons.Filled.Build, currentRoute == "auto_plan") { scope.launch { drawerState.close(); navController.navigate("auto_plan") } }
-                NavigationItem("Preview", Icons.Filled.DateRange, currentRoute == "preview_timetable") { scope.launch { drawerState.close(); navController.navigate("preview_timetable") } }
+                NavigationItem("Home", Icons.Filled.Home, currentRoute == "home") { scope.launch { drawerState.close(); navController.navigate("home") { popUpTo("home") { inclusive = true }; launchSingleTop = true } } }
+                NavigationItem("Upload CSV", Icons.Filled.AddCircle, currentRoute == "upload_csv") { scope.launch { drawerState.close(); navController.navigate("upload_csv") { popUpTo("home"); launchSingleTop = true } } }
+                NavigationItem("Select Subjects", Icons.Filled.Edit, currentRoute == "select_subjects") { scope.launch { drawerState.close(); navController.navigate("select_subjects") { popUpTo("home"); launchSingleTop = true } } }
+                NavigationItem("Auto Plan", Icons.Filled.Build, currentRoute == "auto_plan") { scope.launch { drawerState.close(); navController.navigate("auto_plan") { popUpTo("home"); launchSingleTop = true } } }
+                NavigationItem("Preview", Icons.Filled.DateRange, currentRoute == "preview_timetable") { scope.launch { drawerState.close(); navController.navigate("preview_timetable") { popUpTo("home"); launchSingleTop = true } } }
                 NavigationItem("Find Groupmates", Icons.Filled.Person, currentRoute == "groupmate_finder") {
-                    scope.launch { drawerState.close(); navController.navigate("groupmate_finder") }
+                    scope.launch { drawerState.close(); navController.navigate("groupmate_finder") { popUpTo("home"); launchSingleTop = true } }
                 }
-                NavigationItem("Profile", Icons.Filled.Person, currentRoute == "profile") { scope.launch { drawerState.close(); navController.navigate("profile") } }
+                NavigationItem("Profile", Icons.Filled.Person, currentRoute == "profile") { scope.launch { drawerState.close(); navController.navigate("profile") { popUpTo("home"); launchSingleTop = true } } }
 
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
@@ -213,13 +212,12 @@ fun TimetableApp(viewModel: TimetableViewModel) {
                 composable("upload_csv") { CsvUploadScreen(viewModel) }
                 composable("auto_plan") { AutoPlanScreen(navController, viewModel) }
                 composable("groupmate_finder") {
-                    val groupmateViewModel: GroupmateViewModel = viewModel()
                     GroupmateFinderScreen(groupmateViewModel, viewModel)
                 }
                 composable("profile") {
                     ProfileScreen(
                         viewModel = viewModel,
-                        groupmateViewModel = viewModel()
+                        groupmateViewModel = groupmateViewModel
                     )
                 }
             }
@@ -373,29 +371,7 @@ fun AutoPlanScreen(navController: NavController, viewModel: TimetableViewModel) 
     }
 }
 
-//  Screen: Profile
-@Composable
-fun ProfileScreen(viewModel: TimetableViewModel) {
-    val credits by viewModel.userCredits.collectAsState()
-    val context = LocalContext.current
-    var importText by remember { mutableStateOf("") }
-
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Profile Settings", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(value = credits, onValueChange = { viewModel.updateUserCredits(it) }, label = { Text("Target Credits") }, leadingIcon = { Icon(Icons.Filled.Star, null) }, modifier = Modifier.fillMaxWidth())
-        HorizontalDivider()
-        Text("Backup & Share", style = MaterialTheme.typography.titleLarge)
-        Button(onClick = {
-            val config = viewModel.getConfigString()
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Timetable Config", config)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(context, "Config copied!", Toast.LENGTH_SHORT).show()
-        }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Filled.Share, ""); Spacer(Modifier.width(8.dp)); Text("Copy Config Code") }
-        OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text("Paste Config Code") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { viewModel.loadConfigString(importText) }, modifier = Modifier.fillMaxWidth(), enabled = importText.isNotBlank()) { Text("Load Configuration") }
-    }
-}
+// ProfileScreen is defined in ProfileScreen.kt
 
 //  Screen: Subject Selection
 @Composable
@@ -646,7 +622,8 @@ fun CurrentTimeIndicator(startHour: Int, hourHeight: Dp) {
     val currentMinutes = now.hour * 60 + now.minute
     val startMinutes = startHour * 60
     if (currentMinutes in startMinutes..(22 * 60)) {
-        val topOffset = (currentMinutes - startMinutes).dp
+        val minutesSinceStart = currentMinutes - startMinutes
+        val topOffset = hourHeight * minutesSinceStart / 60
         Canvas(Modifier.fillMaxWidth().height(2.dp).offset(y = topOffset)) { drawLine(color = Color.Red, start = Offset(0f, 0f), end = Offset(size.width, 0f), strokeWidth = 4f) }
     }
 }
@@ -657,8 +634,8 @@ fun TimetableBlock(subject: Subject, startHour: Int, hourHeight: Dp, isGhost: Bo
     if (dayIdx in 0..5) {
         val startMin = subject.getStartMinutes()
         val durationMin = subject.getEndMinutes() - startMin
-        val topOffset = (startMin - (startHour * 60)).dp
-        val height = durationMin.dp
+        val topOffset = hourHeight * (startMin - startHour * 60) / 60
+        val height = hourHeight * durationMin / 60
 
         val textColor = if (isGhost) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else Color.Black
         val modifier = if (isGhost) Modifier.dashedBorder(1.dp, MaterialTheme.colorScheme.primary, 4.dp).background(MaterialTheme.colorScheme.surface.copy(alpha=0.1f)) else Modifier.background(subject.color, RoundedCornerShape(4.dp))
