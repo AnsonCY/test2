@@ -451,6 +451,7 @@ fun TimetablePreviewScreen(viewModel: TimetableViewModel) {
     val allSubjects by viewModel.subjects.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
     val ghostSubjects by viewModel.ghostSubjects.collectAsState()
+    val showGhosting by viewModel.showGhosting.collectAsState()
     val solidSubjects = remember(allSubjects, selectedIds) { allSubjects.filter { selectedIds.contains(it.id) } }
     var isGridView by remember { mutableStateOf(true) }
 
@@ -480,7 +481,7 @@ fun TimetablePreviewScreen(viewModel: TimetableViewModel) {
 
         // Wrap content in a Box that fills max size but allows scrolling
         Box(Modifier.fillMaxSize()) {
-            if (isGridView) TimetableGrid(solidSubjects, ghostSubjects, viewModel) else TimetableListView(solidSubjects)
+            if (isGridView) TimetableGrid(solidSubjects, ghostSubjects, viewModel, showGhosting) else TimetableListView(solidSubjects)
         }
     }
 }
@@ -592,7 +593,7 @@ fun generateTimetablePdf(context: Context, subjects: List<Subject>) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun TimetableGrid(solidSubjects: List<Subject>, ghostSubjects: List<Subject>, viewModel: TimetableViewModel) {
+fun TimetableGrid(solidSubjects: List<Subject>, ghostSubjects: List<Subject>, viewModel: TimetableViewModel, showGhosting: Boolean) {
     val days = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT")
     val startHour = 8; val endHour = 22; val hourHeight = 60.dp; val headerHeight = 40.dp; val timeColWidth = 50.dp
     val scrollState = rememberScrollState()
@@ -607,8 +608,8 @@ fun TimetableGrid(solidSubjects: List<Subject>, ghostSubjects: List<Subject>, vi
             }
             Box(Modifier.fillMaxWidth().verticalScroll(scrollState)) {
                 Column { for (i in startHour..endHour) Box(Modifier.height(hourHeight).fillMaxWidth().border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))) }
-                ghostSubjects.forEach { sub -> TimetableBlock(sub, startHour, hourHeight, isGhost = true, onClick = { viewModel.selectSubject(sub) }) }
-                solidSubjects.forEach { sub -> TimetableBlock(sub, startHour, hourHeight, isGhost = false, onClick = { viewModel.selectSubject(sub) }) }
+                ghostSubjects.forEach { sub -> TimetableBlock(sub, startHour, hourHeight, isGhost = true, isClickable = showGhosting, onClick = { viewModel.selectSubject(sub) }) }
+                solidSubjects.forEach { sub -> TimetableBlock(sub, startHour, hourHeight, isGhost = false, isClickable = showGhosting, onClick = { viewModel.selectSubject(sub) }) }
                 CurrentTimeIndicator(startHour, hourHeight)
             }
         }
@@ -629,7 +630,7 @@ fun CurrentTimeIndicator(startHour: Int, hourHeight: Dp) {
 }
 
 @Composable
-fun TimetableBlock(subject: Subject, startHour: Int, hourHeight: Dp, isGhost: Boolean, onClick: () -> Unit) {
+fun TimetableBlock(subject: Subject, startHour: Int, hourHeight: Dp, isGhost: Boolean, isClickable: Boolean = true, onClick: () -> Unit) {
     val dayIdx = subject.getDayIndex()
     if (dayIdx in 0..5) {
         val startMin = subject.getStartMinutes()
@@ -642,7 +643,7 @@ fun TimetableBlock(subject: Subject, startHour: Int, hourHeight: Dp, isGhost: Bo
 
         Row(Modifier.fillMaxWidth().height(height).offset(y = topOffset)) {
             if(dayIdx > 0) Spacer(Modifier.weight(dayIdx.toFloat()))
-            Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(1.dp).then(modifier).clickable { onClick() }.padding(2.dp)) {
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(1.dp).then(modifier).clickable(enabled = isClickable) { onClick() }.padding(2.dp)) {
                 Column {
                     Text(subject.code, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = textColor, maxLines = 1)
                     Text(subject.getShortTypeAndGroup(), style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = textColor, maxLines = 1)
