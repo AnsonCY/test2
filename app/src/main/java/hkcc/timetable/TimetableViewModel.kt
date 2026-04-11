@@ -26,6 +26,9 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
+    private val _clusterFilter = MutableStateFlow("All")
+    val clusterFilter = _clusterFilter.asStateFlow()
+
     private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
     val selectedIds = _selectedIds.asStateFlow()
 
@@ -40,6 +43,9 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _themeMode = MutableStateFlow(THEME_SYSTEM)
     val themeMode = _themeMode.asStateFlow()
+
+    private val _reminderMinutes = MutableStateFlow(15)
+    val reminderMinutes = _reminderMinutes.asStateFlow()
 
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating = _isGenerating.asStateFlow()
@@ -78,6 +84,10 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateSearch(q: String) { _searchQuery.value = q }
     fun updateUserCredits(c: String) { _userCredits.value = c; saveToDisk() }
     fun toggleGhosting(v: Boolean) { _showGhosting.value = v; saveToDisk() }
+
+    fun updateReminderMinutes(m: Int) { _reminderMinutes.value = m; saveToDisk() }
+
+    fun updateClusterFilter(f: String) { _clusterFilter.value = f }
 
     fun setThemeMode(mode: Int) {
         _themeMode.value = mode
@@ -289,6 +299,7 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 root.put("credits", _userCredits.value)
                 root.put("showGhosting", _showGhosting.value)
                 root.put("themeMode", _themeMode.value)
+                root.put("reminderMinutes", _reminderMinutes.value)
 
                 val idsArray = JSONArray()
                 _selectedIds.value.forEach { idsArray.put(it) }
@@ -332,6 +343,8 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                     } else {
                         _themeMode.value = THEME_SYSTEM
                     }
+
+                    _reminderMinutes.value = root.optInt("reminderMinutes", 15)
 
                     val loadedIds = mutableSetOf<String>()
                     val idsArray = root.optJSONArray("selectedIds")

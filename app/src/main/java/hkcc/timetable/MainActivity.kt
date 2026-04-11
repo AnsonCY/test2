@@ -25,6 +25,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +37,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -83,6 +85,9 @@ class MainActivity : ComponentActivity() {
             Log.d("MainActivity", "Initializing Supabase...")
             SupabaseManager.init(this)
             Log.d("MainActivity", "Supabase initialized successfully")
+
+            NotificationHelper.createNotificationChannel(this)
+
             Toast.makeText(this, "App started!", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.e("MainActivity", "Error initializing Supabase", e)
@@ -139,6 +144,19 @@ fun TimetableApp(viewModel: TimetableViewModel) {
     // SnackBar Host State
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val solidSubjects = remember(viewModel.subjects.collectAsState().value, viewModel.selectedIds.collectAsState().value) {
+        val all = viewModel.subjects.value
+        val ids = viewModel.selectedIds.value
+        all.filter { ids.contains(it.id) }
+    }
+    val reminderMinutes by viewModel.reminderMinutes.collectAsState()
+
+    LaunchedEffect(solidSubjects, reminderMinutes) {
+        if (solidSubjects.isNotEmpty()) {
+            NotificationHelper.scheduleClassReminders(context, solidSubjects, reminderMinutes)
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collectLatest { message ->
             snackbarHostState.currentSnackbarData?.dismiss()
@@ -163,6 +181,7 @@ fun TimetableApp(viewModel: TimetableViewModel) {
                 NavigationItem("Select Subjects", Icons.Filled.Edit, currentRoute == "select_subjects") { scope.launch { drawerState.close(); navController.navigate("select_subjects") { popUpTo("home"); launchSingleTop = true } } }
                 NavigationItem("Auto Plan", Icons.Filled.Build, currentRoute == "auto_plan") { scope.launch { drawerState.close(); navController.navigate("auto_plan") { popUpTo("home"); launchSingleTop = true } } }
                 NavigationItem("Preview", Icons.Filled.DateRange, currentRoute == "preview_timetable") { scope.launch { drawerState.close(); navController.navigate("preview_timetable") { popUpTo("home"); launchSingleTop = true } } }
+                NavigationItem("Academic & GPA", Icons.Filled.Star, currentRoute == "academic") { scope.launch { drawerState.close(); navController.navigate("academic") { popUpTo("home"); launchSingleTop = true } } }
                 NavigationItem("Find Groupmates", Icons.Filled.Person, currentRoute == "groupmate_finder") {
                     scope.launch { drawerState.close(); navController.navigate("groupmate_finder") { popUpTo("home"); launchSingleTop = true } }
                 }
@@ -211,6 +230,7 @@ fun TimetableApp(viewModel: TimetableViewModel) {
                 composable("preview_timetable") { TimetablePreviewScreen(viewModel) }
                 composable("upload_csv") { CsvUploadScreen(viewModel) }
                 composable("auto_plan") { AutoPlanScreen(navController, viewModel) }
+                composable("academic") { AcademicScreen() }
                 composable("groupmate_finder") {
                     GroupmateFinderScreen(groupmateViewModel, viewModel)
                 }
@@ -276,6 +296,7 @@ fun HomeScreen(navController: NavController, viewModel: TimetableViewModel) {
             QuickActionCard("Auto Plan", "Generate schedules", Icons.Filled.Build) { navController.navigate("auto_plan") }
             QuickActionCard("Select Subjects", "Manual selection", Icons.Filled.Edit) { navController.navigate("select_subjects") }
             QuickActionCard("Preview", "View Grid/List", Icons.Filled.DateRange) { navController.navigate("preview_timetable") }
+            QuickActionCard("Academic & GPA", "GPA & Graduation", Icons.Filled.Star) { navController.navigate("academic") }
             QuickActionCard("Find Groupmates", "Find classmates", Icons.Filled.Person) { navController.navigate("groupmate_finder") }
         }
     }
@@ -373,19 +394,306 @@ fun AutoPlanScreen(navController: NavController, viewModel: TimetableViewModel) 
 
 // ProfileScreen is defined in ProfileScreen.kt
 
-//  Screen: Subject Selection
+@Composable
+fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetableViewModel: TimetableViewModel = viewModel()) {
+    val context = LocalContext.current
+    val grades by academicViewModel.grades.collectAsState()
+    val targetGpa by academicViewModel.targetGpa.collectAsState()
+    val remainingCredits by academicViewModel.remainingCredits.collectAsState()
+    val allSubjects by timetableViewModel.subjects.collectAsState()
+    val selectedIds by timetableViewModel.selectedIds.collectAsState()
+    val totalCreditsGoalStr by timetableViewModel.userCredits.collectAsState()
+    val totalCreditsGoal = totalCreditsGoalStr.toIntOrNull() ?: 60
+    
+    val mySubjects = remember(allSubjects, selectedIds) {
+        allSubjects.filter { selectedIds.contains(it.id) }.distinctBy { it.code }
+    }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingGrade by remember { mutableStateOf<CourseGrade?>(null) }
+
+    // Initialize dialog state based on editingGrade
+    var code by remember(showAddDialog) { mutableStateOf(editingGrade?.code ?: "") }
+    var creds by remember(showAddDialog) { mutableStateOf(editingGrade?.credits?.toString() ?: "3") }
+    var gradeValue by remember(showAddDialog) { mutableStateOf(editingGrade?.grade ?: "A") }
+    var cluster by remember(showAddDialog) { mutableStateOf(editingGrade?.cluster ?: "") }
+
+    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        Text("Academic & GPA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+        
+        Card(
+            Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Overall GPA", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                Text(
+                    String.format(Locale.US, "%.2f", academicViewModel.calculateGpa()),
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        "${grades.sumOf { it.credits }} / $totalCreditsGoal Credits",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Text("Graduation Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val requirements = academicViewModel.getGraduationRequirements(totalCreditsGoal, mapOf("Cluster" to 15, "DS" to 18, "GS" to 9))
+                requirements.forEach { req ->
+                    val progress = if (req.required > 0) req.earned.toFloat() / req.required else 1f
+                    Column {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                            Text(req.category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("${req.earned}/${req.required}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { progress.coerceAtMost(1f) },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = if (progress >= 1f) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surface
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text("GPA Planner", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Card(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(value = targetGpa, onValueChange = { academicViewModel.updateTargetGpa(it) }, label = { Text("Target GPA") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
+                    OutlinedTextField(value = remainingCredits, onValueChange = { academicViewModel.updateRemainingCredits(it) }, label = { Text("Rem. Credits") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
+                }
+                val targetResult = academicViewModel.calculateRequiredGrades(targetGpa.toDoubleOrNull() ?: 0.0, remainingCredits.toIntOrNull() ?: 0)
+                Text(targetResult, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Course Grades", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            FilledTonalButton(onClick = { 
+                editingGrade = null
+                showAddDialog = true 
+            }) {
+                Icon(Icons.Default.Add, null)
+                Spacer(Modifier.width(4.dp))
+                Text("Add Grade")
+            }
+        }
+
+        if (grades.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
+                Text("No grades added yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        grades.forEach { grade ->
+            Card(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(grade.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        val desc = academicViewModel.getGradeDescription(grade.grade)
+                        Text(
+                            "${grade.credits} Credits • ${grade.cluster.ifBlank { "No Cluster" }}${if(desc.isNotEmpty()) " • $desc" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        grade.grade,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    IconButton(onClick = { 
+                        editingGrade = grade
+                        showAddDialog = true
+                    }) { Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.outline) }
+                    IconButton(onClick = { academicViewModel.removeGrade(grade.id) }) { Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Deadlines", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            var showDeadlineDialog by remember { mutableStateOf(false) }
+            IconButton(onClick = { showDeadlineDialog = true }) { Icon(Icons.Default.Add, null) }
+            
+            if (showDeadlineDialog) {
+                var title by remember { mutableStateOf("") }
+                var dateStr by remember { mutableStateOf("2024-12-31") }
+                AlertDialog(
+                    onDismissRequest = { showDeadlineDialog = false },
+                    title = { Text("Add Deadline") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Task Title") })
+                            OutlinedTextField(value = dateStr, onValueChange = { dateStr = it }, label = { Text("Due Date (YYYY-MM-DD)") })
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            try {
+                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                val date = sdf.parse(dateStr)
+                                if (date != null) {
+                                    val deadline = Deadline(title = title, dueDate = date.time, courseCode = "")
+                                    academicViewModel.addDeadline(deadline)
+                                    NotificationHelper.scheduleDeadlineReminder(context, deadline)
+                                }
+                            } catch (e: Exception) {}
+                            showDeadlineDialog = false
+                        }) { Text("Add") }
+                    }
+                )
+            }
+        }
+
+        val deadlines by academicViewModel.deadlines.collectAsState()
+        deadlines.forEach { deadline ->
+            Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(deadline.title, fontWeight = FontWeight.Bold)
+                        Text("Due: ${java.text.SimpleDateFormat("MMM dd, yyyy", Locale.US).format(java.util.Date(deadline.dueDate))}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    IconButton(onClick = { academicViewModel.removeDeadline(deadline.id) }) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showAddDialog = false
+                editingGrade = null
+            },
+            title = { Text(if (editingGrade == null) "Add Course Grade" else "Edit Course Grade", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (mySubjects.isNotEmpty() && editingGrade == null) {
+                        Text("Enrolled Courses:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(mySubjects) { sub ->
+                                FilterChip(
+                                    selected = code == sub.code,
+                                    onClick = {
+                                        code = sub.code
+                                        cluster = sub.cluster
+                                    },
+                                    label = { Text(sub.code) }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(value = code, onValueChange = { code = it.uppercase() }, label = { Text("Course Code") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                    OutlinedTextField(value = creds, onValueChange = { creds = it }, label = { Text("Credits") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                    
+                    Text("Select Grade:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    val gradesList = listOf("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "F")
+                    LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(gradesList) { g ->
+                            FilterChip(
+                                selected = gradeValue == g,
+                                onClick = { gradeValue = g },
+                                label = { Text(g) }
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(value = cluster, onValueChange = { cluster = it }, label = { Text("Cluster Area") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (code.isNotBlank()) {
+                            val newGrade = CourseGrade(
+                                id = editingGrade?.id ?: java.util.UUID.randomUUID().toString(),
+                                code = code,
+                                name = "",
+                                credits = creds.toIntOrNull() ?: 3,
+                                grade = gradeValue,
+                                semester = editingGrade?.semester ?: "Current",
+                                cluster = cluster
+                            )
+                            if (editingGrade == null) {
+                                academicViewModel.addGrade(newGrade)
+                            } else {
+                                academicViewModel.updateGrade(newGrade)
+                            }
+                            showAddDialog = false
+                            editingGrade = null
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(if (editingGrade == null) "Add" else "Save Changes") }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showAddDialog = false
+                    editingGrade = null
+                }) { Text("Cancel") }
+            }
+        )
+    }
+}
 @Composable
 fun SubjectSelectionScreen(viewModel: TimetableViewModel) {
     val allSubjects by viewModel.subjects.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
     val selectedCodes by viewModel.selectedSubjectCodes.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    val filtered = if (searchQuery.isBlank()) allSubjects else allSubjects.filter { it.code.contains(searchQuery, true) || it.name.contains(searchQuery, true) || it.lecturer.contains(searchQuery, true) }
+    val clusterFilter by viewModel.clusterFilter.collectAsState()
+
+    val filtered = remember(allSubjects, searchQuery, clusterFilter) {
+        allSubjects.filter {
+            (it.code.contains(searchQuery, true) || it.name.contains(searchQuery, true) || it.lecturer.contains(searchQuery, true)) &&
+            (clusterFilter == "All" || it.cluster == clusterFilter)
+        }
+    }
+
+    val clusters = remember(allSubjects) { listOf("All") + allSubjects.map { it.cluster }.filter { it.isNotEmpty() }.distinct().sorted() }
+
     val grouped = remember(filtered) { filtered.groupBy { it.code } }
     val sortedGroupKeys = remember(grouped, selectedCodes) { grouped.keys.sortedWith(compareByDescending<String> { selectedCodes.contains(it) }.thenBy { it }) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         OutlinedTextField(value = searchQuery, onValueChange = { viewModel.updateSearch(it) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), placeholder = { Text("Search Code, Lecturer...") }, leadingIcon = { Icon(Icons.Filled.Search, "") }, singleLine = true)
+
+        LazyRow(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(clusters) { cluster ->
+                FilterChip(
+                    selected = clusterFilter == cluster,
+                    onClick = { viewModel.updateClusterFilter(cluster) },
+                    label = { Text(cluster) }
+                )
+            }
+        }
+
         LazyColumn {
             items(sortedGroupKeys) { code ->
                 SubjectGroupCard(code, grouped[code]!!, selectedIds, selectedCodes.contains(code), onToggleInterest = { viewModel.toggleSubjectInterest(code) }, onSelectClass = { viewModel.selectSubject(it) })
@@ -457,23 +765,46 @@ fun TimetablePreviewScreen(viewModel: TimetableViewModel) {
 
     // Export Logic State
     val context = LocalContext.current
-    var showExportDialog by remember { mutableStateOf(false) }
+    var showShareOptions by remember { mutableStateOf(false) }
 
-    if (showExportDialog) {
+    if (showShareOptions) {
         AlertDialog(
-            onDismissRequest = { showExportDialog = false },
-            title = { Text("Export Schedule") },
-            text = { Text("Export as PDF file?") },
-            confirmButton = {
-                TextButton(onClick = { generateTimetablePdf(context, solidSubjects); showExportDialog = false }) { Text("Save PDF") }
+            onDismissRequest = { showShareOptions = false },
+            title = { Text("Export & Share") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { generateTimetablePdf(context, solidSubjects); showShareOptions = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Build, null) // Changed icon to a valid one
+                        Spacer(Modifier.width(8.dp))
+                        Text("Export as PDF")
+                    }
+                    Button(
+                        onClick = {
+                            val config = viewModel.getConfigString()
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("Timetable Config", config)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Config code copied to clipboard!", Toast.LENGTH_SHORT).show()
+                            showShareOptions = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Share, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share via Config Code")
+                    }
+                }
             },
-            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { showShareOptions = false }) { Text("Close") } }
         )
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.End) {
-            IconButton(onClick = { showExportDialog = true }) { Icon(Icons.Default.Share, "Export", tint = MaterialTheme.colorScheme.primary) }
+            IconButton(onClick = { showShareOptions = true }) { Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.primary) }
             Spacer(Modifier.width(8.dp))
             IconButton(onClick = { isGridView = false }) { Icon(Icons.AutoMirrored.Filled.List, "List", tint = if(!isGridView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
             IconButton(onClick = { isGridView = true }) { Icon(Icons.Filled.DateRange, "Grid", tint = if(isGridView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -727,9 +1058,10 @@ fun TimetableListView(subjects: List<Subject>) {
 fun CsvUploadScreen(viewModel: TimetableViewModel) {
     val context = LocalContext.current
     var showConfirm by remember { mutableStateOf(false) }
+    var showAddManual by remember { mutableStateOf(false) }
+
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
-            // Manual upload logic
             context.contentResolver.openInputStream(it)?.use { stream ->
                 val subjects = parseCsvStream(stream)
                 if (subjects.isNotEmpty()) {
@@ -739,6 +1071,7 @@ fun CsvUploadScreen(viewModel: TimetableViewModel) {
             }
         }
     }
+
     if (showConfirm) {
         AlertDialog(
             onDismissRequest = { showConfirm = false }, title = { Text("Reset All Data?") }, text = { Text("This will delete all subjects and selections.") },
@@ -747,12 +1080,66 @@ fun CsvUploadScreen(viewModel: TimetableViewModel) {
             icon = { Icon(Icons.Filled.Warning, null) }
         )
     }
+
+    if (showAddManual) {
+        var code by remember { mutableStateOf("") }
+        var name by remember { mutableStateOf("") }
+        var day by remember { mutableStateOf("MON") }
+        var start by remember { mutableStateOf("09:00") }
+        var end by remember { mutableStateOf("11:00") }
+        var venue by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddManual = false },
+            title = { Text("Add Custom Course") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("Course Code") })
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Course Name") })
+                    OutlinedTextField(value = day, onValueChange = { day = it }, label = { Text("Day (MON, TUE...)") })
+                    OutlinedTextField(value = start, onValueChange = { start = it }, label = { Text("Start Time (HH:mm)") })
+                    OutlinedTextField(value = end, onValueChange = { end = it }, label = { Text("End Time (HH:mm)") })
+                    OutlinedTextField(value = venue, onValueChange = { venue = it }, label = { Text("Venue") })
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (code.isNotBlank() && name.isNotBlank()) {
+                        viewModel.addSubjects(listOf(Subject(
+                            code = code, name = name, classNo = "CUSTOM", subGroup = "", type = "Lec",
+                            dayOfWeek = day, startTime = start, endTime = end, campus = "Other", venue = venue
+                        )))
+                        showAddManual = false
+                    }
+                }) { Text("Add") }
+            },
+            dismissButton = { TextButton(onClick = { showAddManual = false }) { Text("Cancel") } }
+        )
+    }
+
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(Icons.Filled.AddCircle, "", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = { launcher.launch("*/*") }, modifier = Modifier.fillMaxWidth(0.7f)) {
+            Icon(Icons.Filled.Add, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Import CSV File")
+        }
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { launcher.launch("*/*") }) { Text("Select CSV File") }
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = { showConfirm = true }) { Icon(Icons.Filled.Delete, ""); Spacer(Modifier.width(4.dp)); Text("Clear All Data", color = MaterialTheme.colorScheme.error) }
+        OutlinedButton(onClick = { showAddManual = true }, modifier = Modifier.fillMaxWidth(0.7f)) {
+            Icon(Icons.Filled.Edit, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Add Manually")
+        }
+        Spacer(Modifier.height(32.dp))
+        TextButton(onClick = { showConfirm = true }) {
+            Icon(Icons.Filled.Delete, "")
+            Spacer(Modifier.width(4.dp))
+            Text("Clear All Data", color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 
@@ -775,7 +1162,8 @@ fun parseCsvStream(inputStream: InputStream): List<Subject> {
                             code = curCode, name = curName, classNo = curClass,
                             subGroup = t.getOrElse(3){""}, type = t.getOrElse(4){""}, dayOfWeek = t.getOrElse(5){""},
                             startTime = times[0].trim(), endTime = times[1].trim(), campus = t.getOrElse(7){""},
-                            venue = t.getOrElse(8){""}, lecturer = t.getOrElse(9){""}
+                            venue = t.getOrElse(8){""}, lecturer = t.getOrElse(9){""},
+                            cluster = t.getOrElse(10){""}
                         ))
                     }
                 }

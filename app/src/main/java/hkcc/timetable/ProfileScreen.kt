@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,7 +30,9 @@ fun ProfileScreen(
 
     // Profile info
     var userName by remember { mutableStateOf(groupmateViewModel.getUserName()) }
-    var studentEmail by remember { mutableStateOf(groupmateViewModel.getStudentEmail()) }
+    var studentId by remember { 
+        mutableStateOf(groupmateViewModel.getStudentEmail().substringBefore("@")) 
+    }
     var phoneNumber by remember { mutableStateOf(groupmateViewModel.getPhoneNumber()) }
     var isEditing by remember { mutableStateOf(false) }
 
@@ -80,10 +83,10 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
-                        value = studentEmail,
-                        onValueChange = { studentEmail = it },
-                        label = { Text("Student Email") },
-                        placeholder = { Text("e.g., 24036212A@common.cpce-polyu.edu.hk") },
+                        value = studentId,
+                        onValueChange = { studentId = it.uppercase() },
+                        label = { Text("Student ID") },
+                        placeholder = { Text("e.g., 2XXXXXXXA") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -96,11 +99,34 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    // Show preview of generated email
+                    if (studentId.isNotBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Your email will be:",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Text(
+                                    text = "${studentId.uppercase()}@common.cpce-polyu.edu.hk",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
                     Button(
                         onClick = {
                             if (userName.isNotBlank()) {
+                                val generatedEmail = if (studentId.isNotBlank()) "${studentId.uppercase()}@common.cpce-polyu.edu.hk" else ""
                                 groupmateViewModel.setUserName(userName)
-                                groupmateViewModel.setStudentEmail(studentEmail)
+                                groupmateViewModel.setStudentEmail(generatedEmail)
                                 groupmateViewModel.setPhoneNumber(phoneNumber)
                                 isEditing = false
                                 Toast.makeText(context, "Profile updated!", Toast.LENGTH_SHORT).show()
@@ -114,9 +140,10 @@ fun ProfileScreen(
                     }
                 } else {
                     // Display mode
-                    InfoRow(Icons.Default.Person, "Name", if (userName.isNotBlank()) userName else "Not set")
-                    InfoRow(Icons.Default.Email, "Student Email", if (studentEmail.isNotBlank()) studentEmail else "Not set")
-                    InfoRow(Icons.Default.Phone, "Phone Number", if (phoneNumber.isNotBlank()) phoneNumber else "Not set")
+                    InfoRow(Icons.Default.Person, "Name", if (groupmateViewModel.getUserName().isNotBlank()) groupmateViewModel.getUserName() else "Not set")
+                    val savedEmail = groupmateViewModel.getStudentEmail()
+                    InfoRow(Icons.Default.Email, "Student Email", if (savedEmail.isNotBlank()) savedEmail else "Not set")
+                    InfoRow(Icons.Default.Phone, "Phone Number", if (groupmateViewModel.getPhoneNumber().isNotBlank()) groupmateViewModel.getPhoneNumber() else "Not set")
                 }
             }
         }
@@ -138,10 +165,42 @@ fun ProfileScreen(
                 OutlinedTextField(
                     value = credits,
                     onValueChange = { viewModel.updateUserCredits(it) },
-                    label = { Text("Target Credits") },
+                    label = { Text("Target Graduation Credits") },
                     leadingIcon = { Icon(Icons.Filled.Star, null) },
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+        }
+
+        HorizontalDivider()
+
+        // Notification Settings Section
+        val reminderMinutes by viewModel.reminderMinutes.collectAsState()
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Notification Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Pre-class reminder (minutes): $reminderMinutes", style = MaterialTheme.typography.bodyMedium)
+                Slider(
+                    value = reminderMinutes.toFloat(),
+                    onValueChange = { viewModel.updateReminderMinutes(it.toInt()) },
+                    valueRange = 0f..120f,
+                    steps = 23
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0m", style = MaterialTheme.typography.labelSmall)
+                    Text("15m", style = MaterialTheme.typography.labelSmall)
+                    Text("30m", style = MaterialTheme.typography.labelSmall)
+                    Text("60m", style = MaterialTheme.typography.labelSmall)
+                    Text("120m", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
 

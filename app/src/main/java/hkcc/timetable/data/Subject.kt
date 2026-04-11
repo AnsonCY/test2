@@ -17,6 +17,7 @@ data class Subject(
     val campus: String,
     val venue: String,
     val lecturer: String = "",
+    val cluster: String = "", // e.g. "Cluster area 1", "DS", "GS"
     val color: Color = generateColor(code)
 ) {
     fun isLecture(): Boolean = type.contains("Lect", ignoreCase = true)
@@ -64,8 +65,9 @@ data class Subject(
             put("startTime", startTime)
             put("endTime", endTime)
             put("campus", campus)
-            put("venue", venue)
+            put( "venue", venue)
             put("lecturer", lecturer)
+            put("cluster", cluster)
         }
     }
 
@@ -83,7 +85,8 @@ data class Subject(
                 endTime = json.getString("endTime"),
                 campus = json.getString("campus"),
                 venue = json.getString("venue"),
-                lecturer = json.optString("lecturer", "")
+                lecturer = json.optString("lecturer", ""),
+                cluster = json.optString("cluster", "")
             )
         }
     }
