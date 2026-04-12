@@ -195,8 +195,12 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             val results = mutableListOf<List<Subject>>()
-            // Limit to 50 schedules
-            solveSchedule(0, subjectOptions, emptyList(), daysToAvoidCampus, results, limit = 10000)
+            // Limit to 10000 schedules
+            solveSchedule(
+                0, subjectOptions, emptyList(),
+                daysToAvoidCampus, avoidMorning, avoidAfternoon, avoidEvening,
+                results, limit = 10000
+            )
 
             if (isActive) {
                 // Remove duplicates logic
@@ -223,6 +227,9 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
         allOptions: List<List<List<Subject>>>,
         currentSchedule: List<Subject>,
         daysToAvoid: Set<String>,
+        avoidMorning: Boolean,
+        avoidAfternoon: Boolean,
+        avoidEvening: Boolean,
         results: MutableList<List<Subject>>,
         limit: Int
     ) {
@@ -241,16 +248,23 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 // 1. Check time clash
                 if (findClash(newItem, currentSchedule) != null) { isSafe = false; break }
 
-                // Only fail if the subject is ON CAMPUS and the day is marked as AVOID
+                // 2. Check days to avoid
                 val dayKey = newItem.dayOfWeek.trim().uppercase().take(3)
-                val isDayAvoided = daysToAvoid.contains(dayKey)
-                val isBackToCampus = newItem.isOnCampus() // ignore Online classes
-
-                if (isDayAvoided && isBackToCampus) {
+                if (daysToAvoid.contains(dayKey) && newItem.isOnCampus()) {
                     isSafe = false; break
                 }
+
+                // 3. Check time preferences
+                val start = newItem.getStartMinutes()
+                if (avoidMorning && start < 720) { isSafe = false; break } // Before 12:00
+                if (avoidAfternoon && start >= 720 && start < 1080) { isSafe = false; break } // 12:00 - 18:00
+                if (avoidEvening && start >= 1080) { isSafe = false; break } // After 18:00
             }
-            if (isSafe) solveSchedule(index + 1, allOptions, currentSchedule + option, daysToAvoid, results, limit)
+            if (isSafe) solveSchedule(
+                index + 1, allOptions, currentSchedule + option,
+                daysToAvoid, avoidMorning, avoidAfternoon, avoidEvening,
+                results, limit
+            )
         }
     }
 
