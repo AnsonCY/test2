@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "hkcc.timetable"
+    namespace = "hkcc.helper"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "hkcc.timetable"
+        applicationId = "hkcc.helper"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

@@ -1,6 +1,6 @@
-package hkcc.timetable
+package hkcc.helper
 
-import hkcc.timetable.data.Subject
+import hkcc.helper.data.Subject
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader

@@ -1,4 +1,4 @@
-package hkcc.timetable
+package hkcc.helper
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel

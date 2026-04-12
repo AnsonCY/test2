@@ -1,6 +1,6 @@
 @file:Suppress("DEPRECATION")
 
-package hkcc.timetable.ui.theme
+package hkcc.helper.ui.theme
 
 import android.app.Activity
 import android.os.Build

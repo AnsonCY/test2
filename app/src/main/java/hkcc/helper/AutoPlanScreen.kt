@@ -1,8 +1,6 @@
-package hkcc.timetable
+package hkcc.helper
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -196,7 +193,7 @@ fun EmptyState() {
 }
 
 @Composable
-fun PlanResultCard(index: Int, schedule: List<hkcc.timetable.data.Subject>, onApply: () -> Unit) {
+fun PlanResultCard(index: Int, schedule: List<hkcc.helper.data.Subject>, onApply: () -> Unit) {
     val scheduleByDay = schedule.sortedBy { it.getDayIndex() }.groupBy { it.dayOfWeek }
 
     Card(

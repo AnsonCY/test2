@@ -1,4 +1,4 @@
-package hkcc.timetable
+package hkcc.helper
 
 import org.junit.Test
 

@@ -1,4 +1,4 @@
-package hkcc.timetable
+package hkcc.helper
 
 import android.os.Build
 import android.os.Bundle
@@ -31,7 +31,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import hkcc.timetable.ui.theme.MyApplicationTheme
+import hkcc.helper.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch

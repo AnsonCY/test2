@@ -1,6 +1,5 @@
-package hkcc.timetable
+package hkcc.helper
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items

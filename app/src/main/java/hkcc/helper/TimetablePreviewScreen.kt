@@ -1,4 +1,4 @@
-package hkcc.timetable
+package hkcc.helper
 
 import android.content.ContentValues
 import android.content.Context
@@ -84,7 +84,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import hkcc.timetable.data.Subject
+import hkcc.helper.data.Subject
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.Locale

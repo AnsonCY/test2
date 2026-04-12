@@ -1,4 +1,4 @@
-package hkcc.timetable
+package hkcc.helper
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import hkcc.timetable.data.Subject
+import hkcc.helper.data.Subject
 
 @Composable
 fun SubjectSelectionScreen(viewModel: TimetableViewModel) {

@@ -1,4 +1,4 @@
-package hkcc.timetable.ui.theme
+package hkcc.helper.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

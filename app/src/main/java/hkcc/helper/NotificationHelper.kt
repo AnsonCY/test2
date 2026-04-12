@@ -1,4 +1,4 @@
-package hkcc.timetable
+package hkcc.helper
 
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -9,7 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import hkcc.timetable.data.Subject
+import hkcc.helper.data.Subject
 import java.util.Calendar
 import androidx.core.content.edit
 
