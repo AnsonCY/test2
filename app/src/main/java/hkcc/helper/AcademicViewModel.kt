@@ -1,5 +1,6 @@
 package hkcc.helper
 
+import android.annotation.SuppressLint
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -124,6 +125,7 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    @SuppressLint("DefaultLocale")
     fun calculateRequiredGrades(targetGpa: Double, remainingCredits: Int): String {
         val currentTotalPoints = _grades.value.filter { gradePoints.containsKey(it.grade) }
             .sumOf { gradePoints[it.grade]!! * it.credits }

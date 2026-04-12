@@ -226,7 +226,7 @@ fun generateTimetablePdf(context: Context, subjects: List<Subject>) {
         
         val allDays = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT")
         val activeDayIndices = subjects.map { it.getDayIndex() }.filter { it in 0..5 }.distinct().sorted()
-        val displayDays = if (activeDayIndices.isEmpty()) (0..4).toList() else activeDayIndices
+        val displayDays = activeDayIndices.ifEmpty { (0..4).toList() }
 
         val surfaceVariant = "#F5F5F5".toColorInt()
         val gridLineColor = "#EEEEEE".toColorInt()
