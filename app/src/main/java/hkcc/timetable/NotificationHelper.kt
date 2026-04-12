@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import hkcc.timetable.data.Subject
 import java.util.Calendar
+import androidx.core.content.edit
 
 class NotificationHelper {
     companion object {
@@ -101,7 +102,7 @@ class NotificationHelper {
                 }
             }
             // 2. Save the new set of scheduled IDs for future cleanup
-            prefs.edit().putStringSet("scheduled_ids", newIds).apply()
+            prefs.edit { putStringSet("scheduled_ids", newIds) }
         }
 
         fun scheduleDeadlineReminder(context: Context, deadline: Deadline) {

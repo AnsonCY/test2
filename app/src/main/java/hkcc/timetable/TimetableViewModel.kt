@@ -157,7 +157,13 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var generationJob: Job? = null
 
-    fun generateAutoPlan(daysToAvoidCampus: Set<String>) {
+    fun generateAutoPlan(
+        daysToAvoidCampus: Set<String>,
+        avoidMorning: Boolean,
+        avoidAfternoon: Boolean,
+        avoidEvening: Boolean,
+        useFixedSections: Boolean
+    ) {
         generationJob?.cancel()
 
         generationJob = viewModelScope.launch(Dispatchers.Default) {
@@ -205,7 +211,7 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                     if (uniqueResults.isEmpty()) {
                         _uiEvent.emit("No valid schedules found. Try relaxing constraints.")
                     } else {
-                        _uiEvent.emit("Found ${uniqueResults.size} unique schedules!")
+                        _uiEvent.emit("Found ${uniqueResults.size} schedules!")
                     }
                 }
             }

@@ -140,7 +140,8 @@ fun ProfileScreen(
                     }
                 } else {
                     // Display mode
-                    InfoRow(Icons.Default.Person, "Name", if (groupmateViewModel.getUserName().isNotBlank()) groupmateViewModel.getUserName() else "Not set")
+                    InfoRow(Icons.Default.Person, "Name",
+                        groupmateViewModel.getUserName().ifBlank { "Not set" })
                     val savedEmail = groupmateViewModel.getStudentEmail()
                     InfoRow(Icons.Default.Email, "Student Email", if (savedEmail.isNotBlank()) savedEmail else "Not set")
                     InfoRow(Icons.Default.Phone, "Phone Number", if (groupmateViewModel.getPhoneNumber().isNotBlank()) groupmateViewModel.getPhoneNumber() else "Not set")
