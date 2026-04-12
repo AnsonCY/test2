@@ -32,8 +32,25 @@ class NotificationHelper {
 
         fun scheduleClassReminders(context: Context, subjects: List<Subject>, reminderMinutes: Int) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
             
+            // 1. Cancel all previously scheduled class alarms to avoid "ghost" notifications
+            val oldIds = prefs.getStringSet("scheduled_ids", emptySet())?.toSet() ?: emptySet()
+            for (id in oldIds) {
+                val cancelIntent = Intent(context, NotificationReceiver::class.java)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context, id.hashCode(), cancelIntent, 
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                )
+                if (pendingIntent != null) {
+                    alarmManager.cancel(pendingIntent)
+                    pendingIntent.cancel()
+                }
+            }
+
+            val newIds = mutableSetOf<String>()
             subjects.forEach { subject ->
+                newIds.add(subject.id)
                 val calendar = Calendar.getInstance()
                 val dayOfWeek = when (subject.dayOfWeek.trim().uppercase().take(3)) {
                     "MON" -> Calendar.MONDAY
@@ -83,6 +100,8 @@ class NotificationHelper {
                     }
                 }
             }
+            // 2. Save the new set of scheduled IDs for future cleanup
+            prefs.edit().putStringSet("scheduled_ids", newIds).apply()
         }
 
         fun scheduleDeadlineReminder(context: Context, deadline: Deadline) {
