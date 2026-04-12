@@ -175,20 +175,36 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
+            val currentSelectedIds = _selectedIds.value
+
             val subjectOptions = mutableListOf<List<List<Subject>>>()
             for (code in interestedCodes) {
                 val subItems = _allSubjects.value.filter { it.code == code }
                 val lectures = subItems.filter { it.isLecture() }
                 val tutorials = subItems.filter { !it.isLecture() }
+                
+                // If prioritize manual selection is ON, and user has already selected something for this code
+                val userSelectedForThisCode = subItems.filter { currentSelectedIds.contains(it.id) }
+                
                 val validCombos = mutableListOf<List<Subject>>()
 
-                if (lectures.isEmpty() && tutorials.isNotEmpty()) tutorials.forEach { validCombos.add(listOf(it)) }
-                else if (tutorials.isEmpty()) lectures.forEach { validCombos.add(listOf(it)) }
-                else {
-                    lectures.forEach { lec ->
-                        val matchingTuts = tutorials.filter { it.classNo == lec.classNo }
-                        if (matchingTuts.isNotEmpty()) matchingTuts.forEach { tut -> validCombos.add(listOf(lec, tut)) }
-                        else validCombos.add(listOf(lec))
+                if (useFixedSections && userSelectedForThisCode.isNotEmpty()) {
+                    // Force the combination that matches user selection
+                    validCombos.add(userSelectedForThisCode)
+                } else {
+                    if (lectures.isEmpty() && tutorials.isNotEmpty()) {
+                        tutorials.forEach { validCombos.add(listOf(it)) }
+                    } else if (tutorials.isEmpty()) {
+                        lectures.forEach { validCombos.add(listOf(it)) }
+                    } else {
+                        lectures.forEach { lec ->
+                            val matchingTuts = tutorials.filter { it.classNo == lec.classNo }
+                            if (matchingTuts.isNotEmpty()) {
+                                matchingTuts.forEach { tut -> validCombos.add(listOf(lec, tut)) }
+                            } else {
+                                validCombos.add(listOf(lec))
+                            }
+                        }
                     }
                 }
                 if (validCombos.isNotEmpty()) subjectOptions.add(validCombos)

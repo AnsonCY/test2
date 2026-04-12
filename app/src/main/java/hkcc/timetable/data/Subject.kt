@@ -29,7 +29,7 @@ data class Subject(
 
     fun getShortTypeAndGroup(): String {
         return if (isLecture()) "Lec $classNo"
-        else if (subGroup.isNotEmpty()) "Tut $subGroup" else "Tut"
+        else "Tut $classNo$subGroup"
     }
 
     fun getCampusType(): String {

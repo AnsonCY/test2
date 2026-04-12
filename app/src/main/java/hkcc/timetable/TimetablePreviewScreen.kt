@@ -21,24 +21,30 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hkcc.timetable.data.Subject
+import java.time.LocalDate
 import java.time.LocalTime
 import java.util.Locale
 import androidx.core.graphics.withTranslation
@@ -100,16 +107,76 @@ fun TimetablePreviewScreen(viewModel: TimetableViewModel) {
         )
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.End) {
-            IconButton(onClick = { showShareOptions = true }) { Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.primary) }
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = { isGridView = false }) { Icon(Icons.AutoMirrored.Filled.List, "List", tint = if(!isGridView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
-            IconButton(onClick = { isGridView = true }) { Icon(Icons.Filled.DateRange, "Grid", tint = if(isGridView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+    Column(Modifier.fillMaxSize()) {
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 4.dp,
+            shadowElevation = 4.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = if (isGridView) "Weekly Schedule" else "Class List",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${solidSubjects.size} sessions confirmed",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.clickable { isGridView = !isGridView }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Filled.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = if (isGridView) "List" else "Grid",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(onClick = { showShareOptions = true }) {
+                            Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
         }
 
         Box(Modifier.fillMaxSize()) {
-            if (isGridView) TimetableGrid(solidSubjects, ghostSubjects, viewModel, showGhosting) else TimetableListView(solidSubjects)
+            if (solidSubjects.isEmpty() && !showGhosting) {
+                EmptyTimetableState()
+            } else {
+                if (isGridView) {
+                    TimetableGrid(solidSubjects, ghostSubjects, viewModel, showGhosting)
+                } else {
+                    TimetableListView(solidSubjects)
+                }
+            }
         }
     }
 }
@@ -216,22 +283,161 @@ fun generateTimetablePdf(context: Context, subjects: List<Subject>) {
 @Composable
 fun TimetableGrid(solidSubjects: List<Subject>, ghostSubjects: List<Subject>, viewModel: TimetableViewModel, showGhosting: Boolean) {
     val days = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT")
-    val startHour = 8; val endHour = 22; val hourHeight = 60.dp; val headerHeight = 40.dp; val timeColWidth = 50.dp
+    val startHour = 8; val endHour = 22; val hourHeight = 80.dp; val headerHeight = 64.dp; val timeColWidth = 60.dp
     val scrollState = rememberScrollState()
+    val todayIdx = LocalDate.now().dayOfWeek.value - 1 // 0=Mon, 6=Sun
 
-    Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(timeColWidth).padding(top = headerHeight).verticalScroll(scrollState)) {
-            for (h in startHour..endHour) Text(String.format(Locale.US, "%02d:00", h), style = MaterialTheme.typography.labelSmall, modifier = Modifier.height(hourHeight).fillMaxWidth(), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onBackground)
-        }
-        Column(Modifier.weight(1f)) {
-            Row(Modifier.height(headerHeight).fillMaxWidth()) {
-                days.forEach { day -> Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { Text(day, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium) } }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        Row(Modifier.fillMaxSize()) {
+            // Time Column
+            Column(
+                Modifier
+                    .width(timeColWidth)
+                    .padding(top = headerHeight)
+                    .verticalScroll(scrollState)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                    .drawBehind {
+                        drawLine(
+                            color = Color.LightGray.copy(alpha = 0.3f),
+                            start = Offset(size.width, 0f),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 1f
+                        )
+                    }
+            ) {
+                for (h in startHour..endHour) {
+                    Box(
+                        Modifier
+                            .height(hourHeight)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Text(
+                                text = String.format(Locale.US, "%02d:00", h),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
-            Box(Modifier.fillMaxWidth().verticalScroll(scrollState)) {
-                Column { for (i in startHour..endHour) Box(Modifier.height(hourHeight).fillMaxWidth().border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))) }
-                ghostSubjects.forEach { sub -> TimetableBlock(sub, startHour, hourHeight, isGhost = true, isClickable = showGhosting, onClick = { viewModel.selectSubject(sub) }) }
-                solidSubjects.forEach { sub -> TimetableBlock(sub, startHour, hourHeight, isGhost = false, isClickable = showGhosting, onClick = { viewModel.selectSubject(sub) }) }
-                CurrentTimeIndicator(startHour, hourHeight)
+
+            // Grid Content
+            Column(Modifier.weight(1f)) {
+                // Day Headers
+                Row(
+                    Modifier
+                        .height(headerHeight)
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawLine(
+                                color = Color.LightGray.copy(alpha = 0.3f),
+                                start = Offset(0f, size.height),
+                                end = Offset(size.width, size.height),
+                                strokeWidth = 1f
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    days.forEachIndexed { index, day ->
+                        val isToday = index == todayIdx
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = day,
+                                    fontWeight = if (isToday) FontWeight.Black else FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                                if (isToday) {
+                                    Box(
+                                        Modifier
+                                            .padding(top = 4.dp)
+                                            .size(6.dp)
+                                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                ) {
+                    // Background Grid with alternating column colors
+                    Row(Modifier.fillMaxWidth().height(hourHeight * (endHour - startHour + 1))) {
+                        days.forEachIndexed { index, _ ->
+                            val isToday = index == todayIdx
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .background(
+                                        when {
+                                            isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
+                                            index % 2 == 0 -> Color.Transparent
+                                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+                                        }
+                                    )
+                                    .drawBehind {
+                                        drawLine(
+                                            color = Color.LightGray.copy(alpha = 0.15f),
+                                            start = Offset(0f, 0f),
+                                            end = Offset(0f, size.height),
+                                            strokeWidth = 1f
+                                        )
+                                    }
+                            )
+                        }
+                    }
+
+                    // Horizontal Grid Lines with thicker lines for midday
+                    Column {
+                        for (i in startHour..endHour) {
+                            val linePrimary = MaterialTheme.colorScheme.primary
+                            val lineOutline = MaterialTheme.colorScheme.outlineVariant
+                            Box(
+                                Modifier
+                                    .height(hourHeight)
+                                    .fillMaxWidth()
+                                    .drawBehind {
+                                        val isMidday = i == 13
+                                        drawLine(
+                                            color = if(isMidday) linePrimary.copy(alpha = 0.3f) else lineOutline.copy(alpha = 0.5f),
+                                            start = Offset(0f, 0f),
+                                            end = Offset(size.width, 0f),
+                                            strokeWidth = if(isMidday) 2f else 1f
+                                        )
+                                    }
+                            )
+                        }
+                    }
+
+                    ghostSubjects.forEach { sub ->
+                        TimetableBlock(sub, startHour, hourHeight, isGhost = true, isClickable = showGhosting, onClick = { viewModel.selectSubject(sub) })
+                    }
+                    solidSubjects.forEach { sub ->
+                        TimetableBlock(sub, startHour, hourHeight, isGhost = false, isClickable = showGhosting, onClick = { viewModel.selectSubject(sub) })
+                    }
+                    CurrentTimeIndicator(startHour, hourHeight)
+                }
             }
         }
     }
@@ -246,7 +452,27 @@ fun CurrentTimeIndicator(startHour: Int, hourHeight: Dp) {
     if (currentMinutes in startMinutes..(22 * 60)) {
         val minutesSinceStart = currentMinutes - startMinutes
         val topOffset = hourHeight * minutesSinceStart / 60
-        Canvas(Modifier.fillMaxWidth().height(2.dp).offset(y = topOffset)) { drawLine(color = Color.Red, start = Offset(0f, 0f), end = Offset(size.width, 0f), strokeWidth = 4f) }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .offset(y = topOffset - 4.dp)
+                .height(8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Canvas(Modifier.fillMaxWidth()) {
+                drawLine(
+                    color = Color.Red.copy(alpha = 0.6f),
+                    start = Offset(0f, size.height / 2),
+                    end = Offset(size.width, size.height / 2),
+                    strokeWidth = 2f
+                )
+                drawCircle(
+                    color = Color.Red,
+                    radius = 4.dp.toPx(),
+                    center = Offset(0f, size.height / 2)
+                )
+            }
+        }
     }
 }
 
@@ -259,20 +485,117 @@ fun TimetableBlock(subject: Subject, startHour: Int, hourHeight: Dp, isGhost: Bo
         val topOffset = hourHeight * (startMin - startHour * 60) / 60
         val height = hourHeight * durationMin / 60
 
-        val textColor = if (isGhost) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else Color.Black
-        val modifier = if (isGhost) Modifier.dashedBorder(1.dp, MaterialTheme.colorScheme.primary, 4.dp).background(MaterialTheme.colorScheme.surface.copy(alpha=0.1f)) else Modifier.background(subject.color, RoundedCornerShape(4.dp))
+        val textColor = if (isGhost) MaterialTheme.colorScheme.primary else Color.White
+        val containerColor = if (isGhost) MaterialTheme.colorScheme.surface else subject.color
+        
+        val modifier = if (isGhost) {
+            Modifier
+                .dashedBorder(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), 12.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+        } else {
+            Modifier
+                .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
+                .background(containerColor, RoundedCornerShape(12.dp))
+                .drawBehind {
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = 0.15f),
+                        topLeft = Offset(0f, 0f),
+                        size = size.copy(height = 4.dp.toPx()),
+                        cornerRadius = CornerRadius(12.dp.toPx())
+                    )
+                }
+        }
 
-        Row(Modifier.fillMaxWidth().height(height).offset(y = topOffset)) {
-            if(dayIdx > 0) Spacer(Modifier.weight(dayIdx.toFloat()))
-            Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(1.dp).then(modifier).clickable(enabled = isClickable) { onClick() }.padding(2.dp)) {
-                Column {
-                    Text(subject.code, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = textColor, maxLines = 1)
-                    Text(subject.getShortTypeAndGroup(), style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = textColor, maxLines = 1)
-                    Text(subject.venue, style = MaterialTheme.typography.labelSmall, fontSize = 8.sp, color = textColor, maxLines = 1)
-                    if(subject.lecturer.isNotEmpty()) Text(subject.lecturer, style = MaterialTheme.typography.labelSmall, fontSize = 7.sp, color = textColor, lineHeight = 8.sp, maxLines = 1)
+        val formattedCode = remember(subject.code) {
+            // Split code into Letters and Digits for better wrapping, e.g., SEHH1234 -> SEHH\n1234
+            val regex = "([A-Z|a-z]+)(\\d+)".toRegex()
+            regex.replace(subject.code, "$1\n$2")
+        }
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(height)
+                .offset(y = topOffset)
+        ) {
+            if (dayIdx > 0) Spacer(Modifier.weight(dayIdx.toFloat()))
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(2.dp)
+                    .then(modifier)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(enabled = isClickable) { onClick() }
+                    .padding(4.dp)
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = formattedCode,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 8.sp,
+                            lineHeight = 9.sp,
+                            color = textColor,
+                            softWrap = true
+                        )
+                        if (isGhost) {
+                            Icon(
+                                Icons.Default.Add,
+                                null,
+                                modifier = Modifier.size(10.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    
+                    Surface(
+                        color = if (isGhost) Color.Transparent else Color.Black.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = subject.getShortTypeAndGroup(),
+                            modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 7.sp,
+                            lineHeight = 8.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isGhost) textColor else Color.White.copy(alpha = 0.95f),
+                            softWrap = true
+                        )
+                    }
+
+                    if (height > 55.dp) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                Icons.Default.Info,
+                                null,
+                                modifier = Modifier.size(8.dp).padding(top = 1.dp),
+                                tint = textColor.copy(alpha = 0.7f)
+                            )
+                            Spacer(Modifier.width(1.dp))
+                            Text(
+                                text = subject.venue,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 7.sp,
+                                lineHeight = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textColor.copy(alpha = 0.8f),
+                                softWrap = true
+                            )
+                        }
+                    }
                 }
             }
-            if(dayIdx < 5) Spacer(Modifier.weight((5 - dayIdx).toFloat()))
+            if (dayIdx < 5) Spacer(Modifier.weight((5 - dayIdx).toFloat()))
         }
     }
 }
@@ -287,53 +610,160 @@ fun TimetableListView(subjects: List<Subject>) {
     val sorted = subjects.sortedWith(compareBy({ it.getDayIndex() }, { it.getStartMinutes() }))
     val groupedByDay = sorted.groupBy { it.dayOfWeek }
 
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         groupedByDay.forEach { (day, dailySubjects) ->
             item {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = day,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 1.dp
                     )
                 }
             }
 
             items(dailySubjects) { subject ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Box(
+                    Row(
                         Modifier
-                            .width(6.dp)
-                            .height(100.dp)
-                            .background(subject.color, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
-                    )
-                    Column(Modifier.padding(12.dp).weight(1f)) {
-                        Text(subject.code, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text(subject.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                        Text(
-                            "${subject.startTime} - ${subject.endTime} @ ${subject.venue}",
-                            style = MaterialTheme.typography.bodySmall
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                    ) {
+                        Box(
+                            Modifier
+                                .width(10.dp)
+                                .fillMaxHeight()
+                                .background(subject.color)
                         )
-                        if (subject.lecturer.isNotEmpty()) {
-                            Text("Lecturer: ${subject.lecturer}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        Column(Modifier.padding(20.dp).weight(1f)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = subject.code,
+                                        fontWeight = FontWeight.Black,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = subject.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                ) {
+                                    Text(
+                                        text = subject.getShortTypeAndGroup(),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            
+                            Spacer(Modifier.height(16.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
+                                InfoTag(Icons.Default.DateRange, "${subject.startTime} - ${subject.endTime}")
+                                InfoTag(Icons.Default.Info, subject.venue)
+                            }
+                            
+                            if (subject.lecturer.isNotEmpty()) {
+                                Spacer(Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(4.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = subject.lecturer,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
-                        Text(
-                            "Group: ${subject.classNo} ${subject.subGroup} (${subject.type})",
-                            style = MaterialTheme.typography.labelSmall
-                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun InfoTag(icon: ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            icon,
+            null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun EmptyTimetableState() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Default.DateRange,
+            null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Empty Timetable",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Text(
+            "Go to 'Select Subjects' or 'Auto Plan' to build your schedule.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.outline,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
     }
 }
