@@ -21,9 +21,10 @@ class NotificationHelper {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val name = "Class Reminders"
                 val descriptionText = "Notifications sent before classes start"
-                val importance = NotificationManager.IMPORTANCE_DEFAULT
+                val importance = NotificationManager.IMPORTANCE_HIGH
                 val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                     description = descriptionText
+                    enableVibration(true)
                 }
                 val notificationManager: NotificationManager =
                     context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -92,12 +93,19 @@ class NotificationHelper {
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                         )
 
-                        alarmManager.setRepeating(
-                            AlarmManager.RTC_WAKEUP,
-                            calendar.timeInMillis,
-                            AlarmManager.INTERVAL_DAY * 7,
-                            pendingIntent
-                        )
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setExactAndAllowWhileIdle(
+                                AlarmManager.RTC_WAKEUP,
+                                calendar.timeInMillis,
+                                pendingIntent
+                            )
+                        } else {
+                            alarmManager.setExact(
+                                AlarmManager.RTC_WAKEUP,
+                                calendar.timeInMillis,
+                                pendingIntent
+                            )
+                        }
                     }
                 }
             }
@@ -152,7 +160,8 @@ class NotificationReceiver : BroadcastReceiver() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

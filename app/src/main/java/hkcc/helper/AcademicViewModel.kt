@@ -4,11 +4,15 @@ import android.annotation.SuppressLint
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -36,6 +40,7 @@ data class GraduationRequirement(
     val earned: Int
 )
 
+@OptIn(FlowPreview::class)
 class AcademicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _grades = MutableStateFlow<List<CourseGrade>>(emptyList())
@@ -50,6 +55,8 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
     private val _remainingCredits = MutableStateFlow("30")
     val remainingCredits = _remainingCredits.asStateFlow()
 
+    private var isLoaded = false
+
     private val gradePoints = mapOf(
         "A+" to 4.3, "A" to 4.0, "A-" to 3.7,
         "B+" to 3.3, "B" to 3.0, "B-" to 2.7,
@@ -58,7 +65,19 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
     )
 
     init {
-        loadFromDisk()
+        viewModelScope.launch {
+            loadFromDisk()
+            isLoaded = true
+            
+            // Auto-save logic: watch all state changes and save to disk automatically
+            combine(_grades, _deadlines, _targetGpa, _remainingCredits) { g, d, t, r ->
+                Unit
+            }.drop(1) // Skip the first emission from initial load
+                .debounce(500) // Don't save too often while typing
+                .collect {
+                    saveToDisk()
+                }
+        }
     }
 
     fun addGrade(course: CourseGrade) {
@@ -71,39 +90,32 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
                 list + course
             }
         }
-        saveToDisk()
     }
 
     fun removeGrade(id: String) {
         _grades.update { it.filter { g -> g.id != id } }
-        saveToDisk()
     }
 
     fun updateGrade(updatedGrade: CourseGrade) {
         _grades.update { list ->
             list.map { if (it.id == updatedGrade.id) updatedGrade else it }
         }
-        saveToDisk()
     }
 
     fun addDeadline(deadline: Deadline) {
         _deadlines.update { it + deadline }
-        saveToDisk()
     }
 
     fun removeDeadline(id: String) {
         _deadlines.update { it.filter { d -> d.id != id } }
-        saveToDisk()
     }
 
     fun updateTargetGpa(gpa: String) {
         _targetGpa.value = gpa
-        saveToDisk()
     }
 
     fun updateRemainingCredits(credits: String) {
         _remainingCredits.value = credits
-        saveToDisk()
     }
 
     fun calculateGpa(): Double {

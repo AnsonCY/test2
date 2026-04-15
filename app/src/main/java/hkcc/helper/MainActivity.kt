@@ -1,5 +1,7 @@
 package hkcc.helper
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -7,7 +9,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -38,12 +42,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Log.d("MainActivity", "Notification permission granted")
+        } else {
+            Log.w("MainActivity", "Notification permission denied")
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         Log.d("MainActivity", "onCreate started")
+
+        checkPermissions()
 
         try {
             // Initialize Supabase
@@ -61,6 +77,18 @@ class MainActivity : ComponentActivity() {
 
         setContent { TimetableAppRoot() }
         Log.d("MainActivity", "onCreate completed")
+    }
+
+    private fun checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 }
 
@@ -99,6 +127,7 @@ fun TimetableApp(viewModel: TimetableViewModel) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val groupmateViewModel: GroupmateViewModel = viewModel()
+    val academicViewModel: AcademicViewModel = viewModel()
     val showGhosting by viewModel.showGhosting.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
 
@@ -206,7 +235,7 @@ fun TimetableApp(viewModel: TimetableViewModel) {
                 composable("preview_timetable") { TimetablePreviewScreen(viewModel) }
                 composable("upload_csv") { CsvUploadScreen(viewModel) }
                 composable("auto_plan") { AutoPlanScreen(navController, viewModel) }
-                composable("academic") { AcademicScreen() }
+                composable("academic") { AcademicScreen(academicViewModel, viewModel) }
                 composable("groupmate_finder") {
                     GroupmateFinderScreen(groupmateViewModel, viewModel)
                 }
