@@ -31,11 +31,21 @@ class UserSessionManager(context: Context) {
     }
 
     fun hasCompleteProfile(): Boolean {
-        return currentUserName.isNotBlank() &&
-                (currentStudentEmail.isNotBlank() || currentPhoneNumber.isNotBlank())
+        // Name is NOT required - only contact info is required
+        return hasContactInfo()
     }
 
     fun hasContactInfo(): Boolean {
         return currentStudentEmail.isNotBlank() || currentPhoneNumber.isNotBlank()
+    }
+
+    fun getDisplayName(): String {
+        return currentUserName.ifBlank {
+            if (currentStudentEmail.isNotBlank()) {
+                currentStudentEmail.substringBefore("@")
+            } else {
+                "HKCC Student"
+            }
+        }
     }
 }
