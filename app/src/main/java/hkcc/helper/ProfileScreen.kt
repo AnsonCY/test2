@@ -153,55 +153,168 @@ fun ProfileScreen(
         HorizontalDivider()
 
         // Target Credits Section
+        val isLocked by viewModel.isCreditsLocked.collectAsState()
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Academic Settings",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Academic Settings",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (isLocked) {
+                        IconButton(onClick = { viewModel.unlockCredits() }) {
+                            Icon(Icons.Default.Lock, "Unlock", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = credits,
-                    onValueChange = { viewModel.updateUserCredits(it) },
+                    onValueChange = { if (!isLocked) viewModel.updateUserCredits(it) },
                     label = { Text("Target Graduation Credits") },
                     leadingIcon = { Icon(Icons.Filled.Star, null) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLocked,
+                    supportingText = if (isLocked) { { Text("Locked by Study Pattern") } } else null
                 )
             }
         }
 
         HorizontalDivider()
 
+        // Study Pattern Section
+        val studyPatterns by viewModel.studyPatterns.collectAsState()
+        val savedPattern by viewModel.selectedStudyPattern.collectAsState()
+        
+        if (studyPatterns.isNotEmpty()) {
+            var selectedProgram by remember { mutableStateOf(savedPattern["program"] ?: "") }
+            var selectedPattern by remember { mutableStateOf(savedPattern["pattern"] ?: "") }
+            var selectedSemester by remember { mutableStateOf(savedPattern["semester"] ?: "") }
+            var selectedCantonese by remember { mutableStateOf(savedPattern["cantonese"] ?: "") }
+            var selectedEngLevel by remember { mutableStateOf(savedPattern["eng"] ?: "") }
+
+            // Update local state when saved pattern changes (e.g. on load)
+            LaunchedEffect(savedPattern) {
+                if (savedPattern.isNotEmpty()) {
+                    selectedProgram = savedPattern["program"] ?: ""
+                    selectedPattern = savedPattern["pattern"] ?: ""
+                    selectedSemester = savedPattern["semester"] ?: ""
+                    selectedCantonese = savedPattern["cantonese"] ?: ""
+                    selectedEngLevel = savedPattern["eng"] ?: ""
+                }
+            }
+
+            val programs = remember(studyPatterns) { studyPatterns.map { it.programCode }.distinct() }
+            val patterns = remember(selectedProgram, studyPatterns) { 
+                studyPatterns.filter { it.programCode == selectedProgram }.map { it.studyPattern }.distinct() 
+            }
+            val semesters = remember(selectedProgram, selectedPattern, studyPatterns) {
+                studyPatterns.filter { it.programCode == selectedProgram && it.studyPattern == selectedPattern }
+                    .map { it.semester }.distinct()
+            }
+            val cantoneseOptions = remember(selectedProgram, selectedPattern, selectedSemester, studyPatterns) {
+                studyPatterns.filter { 
+                    it.programCode == selectedProgram && 
+                    it.studyPattern == selectedPattern && 
+                    it.semester == selectedSemester 
+                }.map { it.cantonesePutonghua }.distinct()
+            }
+            val engLevels = remember(selectedProgram, selectedPattern, selectedSemester, selectedCantonese, studyPatterns) {
+                studyPatterns.filter {
+                    it.programCode == selectedProgram &&
+                    it.studyPattern == selectedPattern &&
+                    it.semester == selectedSemester &&
+                    it.cantonesePutonghua == selectedCantonese
+                }.map { it.engLevel }.distinct()
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Study Pattern",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("Auto-select subjects and set graduation credits based on your program.", style = MaterialTheme.typography.bodySmall)
+
+                    DropdownSelector("Program Code", selectedProgram, programs) { selectedProgram = it }
+                    DropdownSelector("Study Pattern", selectedPattern, patterns) { selectedPattern = it }
+                    DropdownSelector("Semester", selectedSemester, semesters) { selectedSemester = it }
+                    DropdownSelector("Cantonese/Putonghua", selectedCantonese, cantoneseOptions) { selectedCantonese = it }
+                    DropdownSelector("Eng Level", selectedEngLevel, engLevels) { selectedEngLevel = it }
+
+                    Button(
+                        onClick = {
+                            val title = studyPatterns.find { it.programCode == selectedProgram }?.programTitle ?: ""
+                            viewModel.applyStudyPattern(selectedProgram, title, selectedPattern, selectedSemester, selectedCantonese, selectedEngLevel)
+                            Toast.makeText(context, "Study pattern applied!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = selectedProgram.isNotBlank() && selectedPattern.isNotBlank() && 
+                                  selectedSemester.isNotBlank() && selectedCantonese.isNotBlank() && 
+                                  selectedEngLevel.isNotBlank()
+                    ) {
+                        Text("Apply Pattern")
+                    }
+                }
+            }
+            HorizontalDivider()
+        }
+
         // Notification Settings Section
         val reminderMinutes by viewModel.reminderMinutes.collectAsState()
+        val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
+        
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Notification Settings",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Pre-class reminder (minutes): $reminderMinutes", style = MaterialTheme.typography.bodyMedium)
-                Slider(
-                    value = reminderMinutes.toFloat(),
-                    onValueChange = { viewModel.updateReminderMinutes(it.toInt()) },
-                    valueRange = 0f..120f,
-                    steps = 23
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("0m", style = MaterialTheme.typography.labelSmall)
-                    Text("15m", style = MaterialTheme.typography.labelSmall)
-                    Text("30m", style = MaterialTheme.typography.labelSmall)
-                    Text("60m", style = MaterialTheme.typography.labelSmall)
-                    Text("120m", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Notification Settings",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Switch(
+                        checked = notificationsEnabled,
+                        onCheckedChange = { viewModel.toggleNotifications(it) }
+                    )
+                }
+                
+                if (notificationsEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Pre-class reminder (minutes): $reminderMinutes", style = MaterialTheme.typography.bodyMedium)
+                    Slider(
+                        value = reminderMinutes.toFloat(),
+                        onValueChange = { viewModel.updateReminderMinutes(it.toInt()) },
+                        valueRange = 0f..120f,
+                        steps = 23
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("0m", style = MaterialTheme.typography.labelSmall)
+                        Text("15m", style = MaterialTheme.typography.labelSmall)
+                        Text("30m", style = MaterialTheme.typography.labelSmall)
+                        Text("60m", style = MaterialTheme.typography.labelSmall)
+                        Text("120m", style = MaterialTheme.typography.labelSmall)
+                    }
+                } else {
+                    Text("Notifications are currently disabled.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -250,6 +363,51 @@ fun ProfileScreen(
                 ) {
                     Text("Load Configuration")
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DropdownSelector(
+    label: String,
+    selected: String,
+    options: List<String>,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { selectionOption ->
+                DropdownMenuItem(
+                    text = { Text(selectionOption) },
+                    onClick = {
+                        onSelect(selectionOption)
+                        expanded = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                )
             }
         }
     }

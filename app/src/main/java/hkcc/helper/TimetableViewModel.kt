@@ -38,6 +38,12 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     private val _userCredits = MutableStateFlow("15")
     val userCredits = _userCredits.asStateFlow()
 
+    private val _isCreditsLocked = MutableStateFlow(false)
+    val isCreditsLocked = _isCreditsLocked.asStateFlow()
+
+    private val _studyPatterns = MutableStateFlow<List<StudyPatternRow>>(emptyList())
+    val studyPatterns = _studyPatterns.asStateFlow()
+
     private val _showGhosting = MutableStateFlow(true)
     val showGhosting = _showGhosting.asStateFlow()
 
@@ -46,6 +52,12 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _reminderMinutes = MutableStateFlow(15)
     val reminderMinutes = _reminderMinutes.asStateFlow()
+
+    private val _notificationsEnabled = MutableStateFlow(true)
+    val notificationsEnabled = _notificationsEnabled.asStateFlow()
+
+    private val _selectedStudyPattern = MutableStateFlow<Map<String, String>>(emptyMap())
+    val selectedStudyPattern = _selectedStudyPattern.asStateFlow()
 
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating = _isGenerating.asStateFlow()
@@ -79,6 +91,91 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         loadFromDisk()
+        loadStudyPatterns()
+    }
+
+    private fun loadStudyPatterns() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                
+                // Load Subject Specs first
+                val specList = context.assets.open("subjectspec.csv").use { parseSubjectSpecCsv(it) }
+                
+                // Load Subjects with spec info - link by program title
+                val programTitle = _selectedStudyPattern.value["programTitle"] ?: ""
+                context.assets.open("subjects.csv").use { stream ->
+                    val subjectsFromCsv = parseCsvStream(stream, specList, programTitle)
+                    addSubjects(subjectsFromCsv)
+                }
+
+                // Update existing subjects with spec info
+                _allSubjects.update { currentList ->
+                    currentList.map { sub ->
+                        val spec = specList.find { 
+                            it.code == sub.code && (it.programme.isBlank() || it.programme.equals(programTitle, true))
+                        } ?: specList.find { it.code == sub.code }
+                        
+                        if (spec != null) {
+                            sub.copy(
+                                cluster = spec.clusterArea,
+                                clusterArea = spec.clusterArea,
+                                compulsoryElective = spec.compulsoryElective,
+                                geDs = spec.geDs,
+                                program = spec.programme,
+                                credits = spec.credit.toIntOrNull() ?: 3
+                            )
+                        } else sub
+                    }
+                }
+
+                context.assets.open("studypattern.csv").use { stream ->
+                    _studyPatterns.value = parseStudyPatternCsv(stream)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun applyStudyPattern(programCode: String, programTitle: String, pattern: String, semester: String, cantonesePutonghua: String, engLevel: String) {
+        _selectedStudyPattern.value = mapOf(
+            "program" to programCode,
+            "programTitle" to programTitle,
+            "pattern" to pattern,
+            "semester" to semester,
+            "cantonese" to cantonesePutonghua,
+            "eng" to engLevel
+        )
+        val rows = _studyPatterns.value.filter {
+            it.programCode == programCode &&
+                    it.studyPattern == pattern &&
+                    it.semester == semester &&
+                    it.cantonesePutonghua == cantonesePutonghua &&
+                    it.engLevel == engLevel
+        }
+
+        if (rows.isNotEmpty()) {
+            // Clear existing selections before applying new pattern
+            _selectedIds.value = emptySet()
+            
+            val credits = rows[0].requiredCredit
+            _userCredits.value = credits
+            _isCreditsLocked.value = true
+
+            val subjectCodes = rows.map { it.subjectCode }.toSet()
+            _selectedSubjectCodes.value = subjectCodes
+            saveToDisk()
+            
+            // Reload subjects to apply program-specific specs
+            loadStudyPatterns()
+        }
+    }
+
+    fun unlockCredits() {
+        _isCreditsLocked.value = false
+        _selectedStudyPattern.value = emptyMap()
+        saveToDisk()
     }
 
     fun updateSearch(q: String) { _searchQuery.value = q }
@@ -86,6 +183,7 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     fun toggleGhosting(v: Boolean) { _showGhosting.value = v; saveToDisk() }
 
     fun updateReminderMinutes(m: Int) { _reminderMinutes.value = m; saveToDisk() }
+    fun toggleNotifications(enabled: Boolean) { _notificationsEnabled.value = enabled; saveToDisk() }
 
     fun updateClusterFilter(f: String) { _clusterFilter.value = f }
 
@@ -336,6 +434,12 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 root.put("showGhosting", _showGhosting.value)
                 root.put("themeMode", _themeMode.value)
                 root.put("reminderMinutes", _reminderMinutes.value)
+                root.put("notificationsEnabled", _notificationsEnabled.value)
+                root.put("isCreditsLocked", _isCreditsLocked.value)
+                
+                val patternObj = JSONObject()
+                _selectedStudyPattern.value.forEach { (k, v) -> patternObj.put(k, v) }
+                root.put("selectedStudyPattern", patternObj)
 
                 val idsArray = JSONArray()
                 _selectedIds.value.forEach { idsArray.put(it) }
@@ -381,6 +485,13 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                     }
 
                     _reminderMinutes.value = root.optInt("reminderMinutes", 15)
+                    _notificationsEnabled.value = root.optBoolean("notificationsEnabled", true)
+                    _isCreditsLocked.value = root.optBoolean("isCreditsLocked", false)
+
+                    val patternMap = mutableMapOf<String, String>()
+                    val patternObj = root.optJSONObject("selectedStudyPattern")
+                    patternObj?.keys()?.forEach { patternMap[it] = patternObj.getString(it) }
+                    _selectedStudyPattern.value = patternMap
 
                     val loadedIds = mutableSetOf<String>()
                     val idsArray = root.optJSONArray("selectedIds")

@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -31,11 +32,17 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
     val remainingCredits by academicViewModel.remainingCredits.collectAsState()
     val allSubjects by timetableViewModel.subjects.collectAsState()
     val selectedIds by timetableViewModel.selectedIds.collectAsState()
+    val selectedSubjectCodes by timetableViewModel.selectedSubjectCodes.collectAsState()
     val totalCreditsGoalStr by timetableViewModel.userCredits.collectAsState()
     val totalCreditsGoal = totalCreditsGoalStr.toIntOrNull() ?: 60
 
-    val mySubjects = remember(allSubjects, selectedIds) {
-        allSubjects.filter { selectedIds.contains(it.id) }.distinctBy { it.code }
+    val selectedStudyPattern by timetableViewModel.selectedStudyPattern.collectAsState()
+    val studyPatterns by timetableViewModel.studyPatterns.collectAsState()
+
+    val mySubjects = remember(allSubjects, selectedIds, selectedSubjectCodes) {
+        val fullySelected = allSubjects.filter { selectedIds.contains(it.id) }.map { it.code }.toSet()
+        val allInterested = fullySelected + selectedSubjectCodes
+        allSubjects.filter { allInterested.contains(it.code) }.distinctBy { it.code }
     }
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -74,13 +81,47 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
         Text("Graduation Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val requirements = academicViewModel.getGraduationRequirements(totalCreditsGoal, mapOf("Cluster" to 15, "DS" to 18, "GS" to 9))
-                requirements.forEach { req ->
+                val currentPattern = if (selectedStudyPattern.isNotEmpty()) {
+                    studyPatterns.find { 
+                        it.programCode == selectedStudyPattern["program"] &&
+                        it.studyPattern == selectedStudyPattern["pattern"] &&
+                        it.semester == selectedStudyPattern["semester"] &&
+                        it.cantonesePutonghua == selectedStudyPattern["cantonese"] &&
+                        it.engLevel == selectedStudyPattern["eng"]
+                    }
+                } else null
+
+                val dsElectiveReq = (currentPattern?.totalDs?.toIntOrNull() ?: 0) * 3
+                val geElectiveReq = (currentPattern?.totalGe?.toIntOrNull() ?: 0) * 3
+                
+                val clusterAreas = listOf("A", "M", "N", "E", "D")
+                
+                val totalEarned = grades.sumOf { it.credits }
+                
+                // Only count Electives for the specific categories as requested
+                val earnedDS = grades.filter { it.geDs == "DS" && it.compulsoryElective == "Elective" }.sumOf { it.credits }
+                val earnedGEElectives = grades.filter { it.geDs == "GE" && it.compulsoryElective == "Elective" }.sumOf { it.credits }
+                
+                // Clusters completed (unique areas). Compulsory subjects with clusters do NOT count here based on "compulsory only count in total"
+                val completedClusters = grades.filter { it.cluster in clusterAreas && it.compulsoryElective == "Elective" }
+                    .map { it.cluster }.distinct().size
+
+                val displayReqs = mutableListOf(
+                    GraduationRequirement("Total Credits", totalCreditsGoal, totalEarned),
+                    GraduationRequirement("Cluster Areas", 5, completedClusters)
+                )
+                
+                if (dsElectiveReq > 0) displayReqs.add(GraduationRequirement("DS Electives", dsElectiveReq, earnedDS))
+                if (geElectiveReq > 0) displayReqs.add(GraduationRequirement("GE Electives", geElectiveReq, earnedGEElectives))
+                
+                displayReqs.forEach { req ->
                     val progress = if (req.required > 0) req.earned.toFloat() / req.required else 1f
                     Column {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                             Text(req.category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("${req.earned}/${req.required}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            val displayEarned = if (req.category == "Cluster Areas") "${req.earned}" else "${req.earned}"
+                            Text("$displayEarned/${req.required}${if (req.category != "Cluster Areas") " Cr" else ""}", 
+                                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
@@ -136,11 +177,20 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                     Column(Modifier.weight(1f)) {
                         Text(grade.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         val desc = academicViewModel.getGradeDescription(grade.grade)
+                        val details = listOfNotNull(
+                            grade.cluster.ifBlank { null },
+                            grade.compulsoryElective.ifBlank { null },
+                            desc.ifBlank { null }
+                        ).joinToString(" • ")
+                        
                         Text(
-                            "${grade.credits} Credits • ${grade.cluster.ifBlank { "No Cluster" }}${if(desc.isNotEmpty()) " • $desc" else ""}",
+                            "${grade.credits} Credits${if(details.isNotEmpty()) " • $details" else ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (grade.program.isNotBlank()) {
+                            Text("Programme: ${grade.program}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
                     Text(
                         grade.grade,
@@ -214,6 +264,29 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
         var gradeValue by remember(editingGrade) { mutableStateOf(editingGrade?.grade ?: "A") }
         var cluster by remember(editingGrade) { mutableStateOf(editingGrade?.cluster ?: "") }
 
+        val matchedSubject = remember(code, allSubjects) { 
+            allSubjects.find { it.code.equals(code.trim(), true) } 
+        }
+
+        LaunchedEffect(matchedSubject) {
+            if (matchedSubject != null && editingGrade == null) {
+                val autoValue = when {
+                    matchedSubject.geDs == "DS" -> "DS"
+                    matchedSubject.geDs == "GE" && matchedSubject.clusterArea.isNotBlank() -> matchedSubject.clusterArea
+                    matchedSubject.geDs == "GE" && matchedSubject.clusterArea.isBlank() -> "GS"
+                    else -> matchedSubject.clusterArea.ifBlank { matchedSubject.cluster }
+                }
+                if (autoValue.isNotBlank()) {
+                    cluster = autoValue
+                }
+                creds = matchedSubject.credits.toString()
+            }
+        }
+
+        val isClusterLocked = matchedSubject != null && (
+            matchedSubject.geDs.isNotBlank() || matchedSubject.clusterArea.isNotBlank() || matchedSubject.cluster.isNotBlank()
+        )
+
         AlertDialog(
             onDismissRequest = {
                 showAddDialog = false
@@ -230,7 +303,13 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                                     selected = code == sub.code,
                                     onClick = {
                                         code = sub.code
-                                        cluster = sub.cluster
+                                        cluster = when {
+                                            sub.geDs == "DS" -> "DS"
+                                            sub.geDs == "GE" && sub.clusterArea.isNotBlank() -> sub.clusterArea
+                                            sub.geDs == "GE" && sub.clusterArea.isBlank() -> "GS"
+                                            else -> sub.clusterArea.ifBlank { sub.cluster }
+                                        }
+                                        creds = sub.credits.toString()
                                     },
                                     label = { Text(sub.code) }
                                 )
@@ -238,7 +317,16 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                         }
                     }
                     OutlinedTextField(value = code, onValueChange = { code = it.uppercase() }, label = { Text("Course Code") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
-                    OutlinedTextField(value = creds, onValueChange = { creds = it }, label = { Text("Credits") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                    OutlinedTextField(
+                        value = creds, 
+                        onValueChange = { if (matchedSubject == null) creds = it }, 
+                        label = { Text("Credits") }, 
+                        modifier = Modifier.fillMaxWidth(), 
+                        singleLine = true, 
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = matchedSubject == null,
+                        supportingText = if (matchedSubject != null) { { Text("Locked by subject specification") } } else null
+                    )
 
                     Text("Select Grade:", style = MaterialTheme.typography.labelSmall)
                     val gradesList = listOf("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "F")
@@ -252,12 +340,23 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                         }
                     }
 
-                    OutlinedTextField(value = cluster, onValueChange = { cluster = it }, label = { Text("Cluster (e.g. DS, GS, Area 1)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                    OutlinedTextField(
+                        value = cluster, 
+                        onValueChange = { if (!isClusterLocked) cluster = it }, 
+                        label = { Text("Cluster (e.g. DS, GS, Area 1)") }, 
+                        modifier = Modifier.fillMaxWidth(), 
+                        singleLine = true, 
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isClusterLocked,
+                        supportingText = if (isClusterLocked) { { Text("Locked by subject specification") } } else null,
+                        trailingIcon = if (isClusterLocked) { { Icon(Icons.Default.Lock, null, modifier = Modifier.size(18.dp)) } } else null
+                    )
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     if (code.isNotBlank()) {
+                        val spec = allSubjects.find { it.code == code }
                         val newGrade = CourseGrade(
                             id = editingGrade?.id ?: java.util.UUID.randomUUID().toString(),
                             code = code,
@@ -265,7 +364,10 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                             credits = creds.toIntOrNull() ?: 3,
                             grade = gradeValue,
                             semester = editingGrade?.semester ?: "Current",
-                            cluster = cluster
+                            cluster = cluster.ifBlank { spec?.clusterArea ?: "" },
+                            compulsoryElective = spec?.compulsoryElective ?: "",
+                            geDs = spec?.geDs ?: "",
+                            program = spec?.program ?: ""
                         )
                         if (editingGrade == null) {
                             academicViewModel.addGrade(newGrade)

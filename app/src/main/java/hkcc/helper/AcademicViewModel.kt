@@ -24,7 +24,10 @@ data class CourseGrade(
     val credits: Int,
     val grade: String, // A+, A, B+, etc.
     val semester: String,
-    val cluster: String = ""
+    val cluster: String = "",
+    val compulsoryElective: String = "",
+    val geDs: String = "",
+    val program: String = ""
 )
 
 data class Deadline(
@@ -191,6 +194,9 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
                     obj.put("grade", g.grade)
                     obj.put("semester", g.semester)
                     obj.put("cluster", g.cluster)
+                    obj.put("compulsoryElective", g.compulsoryElective)
+                    obj.put("geDs", g.geDs)
+                    obj.put("program", g.program)
                     array.put(obj)
                 }
                 
@@ -232,7 +238,10 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
                     list.add(CourseGrade(
                         obj.getString("id"), obj.getString("code"), obj.getString("name"),
                         obj.getInt("credits"), obj.getString("grade"), obj.getString("semester"),
-                        obj.optString("cluster", "")
+                        obj.optString("cluster", ""),
+                        obj.optString("compulsoryElective", ""),
+                        obj.optString("geDs", ""),
+                        obj.optString("program", "")
                     ))
                 }
                 _grades.value = list

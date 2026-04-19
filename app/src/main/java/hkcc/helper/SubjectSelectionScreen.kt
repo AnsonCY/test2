@@ -32,11 +32,14 @@ fun SubjectSelectionScreen(viewModel: TimetableViewModel) {
     val filtered = remember(allSubjects, searchQuery, clusterFilter) {
         allSubjects.filter {
             (it.code.contains(searchQuery, true) || it.name.contains(searchQuery, true) || it.lecturer.contains(searchQuery, true)) &&
-            (clusterFilter == "All" || it.cluster == clusterFilter)
+            (clusterFilter == "All" || it.cluster == clusterFilter || it.geDs == clusterFilter)
         }
     }
 
-    val clusters = remember(allSubjects) { listOf("All") + allSubjects.map { it.cluster }.filter { it.isNotEmpty() }.distinct().sorted() }
+    val filters = remember(allSubjects) { 
+        val clusters = allSubjects.map { it.cluster }.filter { it.isNotEmpty() }.distinct().sorted()
+        listOf("All", "GE", "DS") + clusters
+    }
 
     val grouped = remember(filtered) { filtered.groupBy { it.code } }
     val sortedGroupKeys = remember(grouped, selectedCodes) { grouped.keys.sortedWith(compareByDescending<String> { selectedCodes.contains(it) }.thenBy { it }) }
@@ -45,11 +48,11 @@ fun SubjectSelectionScreen(viewModel: TimetableViewModel) {
         OutlinedTextField(value = searchQuery, onValueChange = { viewModel.updateSearch(it) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), placeholder = { Text("Search Code, Lecturer...") }, leadingIcon = { Icon(Icons.Filled.Search, "") }, singleLine = true, shape = RoundedCornerShape(12.dp))
 
         LazyRow(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(clusters) { cluster ->
+            items(filters) { filter ->
                 FilterChip(
-                    selected = clusterFilter == cluster,
-                    onClick = { viewModel.updateClusterFilter(cluster) },
-                    label = { Text(cluster) }
+                    selected = clusterFilter == filter,
+                    onClick = { viewModel.updateClusterFilter(filter) },
+                    label = { Text(filter) }
                 )
             }
         }
@@ -80,7 +83,21 @@ fun SubjectGroupCard(code: String, subjects: List<Subject>, selectedIds: Set<Str
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = isInterested, onCheckedChange = { onToggleInterest() })
-                Column(Modifier.weight(1f).clickable { expanded = !expanded }) { Text(code, fontWeight = FontWeight.Bold); Text(name, style = MaterialTheme.typography.bodySmall) }
+                Column(Modifier.weight(1f).clickable { expanded = !expanded }) { 
+                    Text(code, fontWeight = FontWeight.Bold)
+                    Text(name, style = MaterialTheme.typography.bodySmall)
+                    val firstSub = subjects.firstOrNull()
+                    if (firstSub != null && (firstSub.clusterArea.isNotEmpty() || firstSub.compulsoryElective.isNotEmpty())) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (firstSub.clusterArea.isNotEmpty()) SuggestionChip(onClick = {}, label = { Text(firstSub.clusterArea, style = MaterialTheme.typography.labelSmall) })
+                            if (firstSub.geDs.isNotEmpty()) SuggestionChip(onClick = {}, label = { Text(firstSub.geDs, style = MaterialTheme.typography.labelSmall) })
+                            if (firstSub.compulsoryElective.isNotEmpty()) SuggestionChip(onClick = {}, label = { Text(firstSub.compulsoryElective, style = MaterialTheme.typography.labelSmall) })
+                        }
+                        if (firstSub.program.isNotEmpty()) {
+                            Text("Programme: ${firstSub.program}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
                 IconButton(onClick = { expanded = !expanded }) { Icon(if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, "") }
             }
             AnimatedVisibility(expanded) {
