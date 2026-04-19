@@ -123,15 +123,21 @@ fun ProfileScreen(
 
                     Button(
                         onClick = {
-                            if (userName.isNotBlank()) {
-                                val generatedEmail = if (studentId.isNotBlank()) "${studentId.uppercase()}@common.cpce-polyu.edu.hk" else ""
-                                groupmateViewModel.setUserName(userName)
+                            val generatedEmail = if (studentId.isNotBlank()) "${studentId.uppercase()}@common.cpce-polyu.edu.hk" else ""
+                            val hasContactInfo = studentId.isNotBlank() || phoneNumber.isNotBlank()
+
+                            if (hasContactInfo) {
+                                // Name can be blank - use Student ID as fallback display name if name is empty
+                                val finalName = userName.ifBlank {
+                                    if (studentId.isNotBlank()) "Student $studentId" else "HKCC Student"
+                                }
+                                groupmateViewModel.setUserName(finalName)
                                 groupmateViewModel.setStudentEmail(generatedEmail)
                                 groupmateViewModel.setPhoneNumber(phoneNumber)
                                 isEditing = false
                                 Toast.makeText(context, "Profile updated!", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "Name is required", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Please enter either Student ID or Phone Number", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
