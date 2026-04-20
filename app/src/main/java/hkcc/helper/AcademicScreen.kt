@@ -1,5 +1,9 @@
 package hkcc.helper
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -23,10 +27,32 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.Locale
 
+val ColorScheme.infoContainer: Color
+    @Composable
+    get() = if (!isSystemInDarkTheme()) Color(0xFFE1F5FE) else Color(0xFF01579B)
+
+@Composable
+fun GradeItem(grade: CourseGrade, viewModel: AcademicViewModel, onEdit: (CourseGrade) -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(grade.code, fontWeight = FontWeight.Bold)
+                Text("${grade.credits} Credits • ${grade.cluster}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(grade.grade, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = { onEdit(grade) }) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp)) }
+            IconButton(onClick = { viewModel.removeGrade(grade.id) }) { Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetableViewModel: TimetableViewModel = viewModel()) {
-    val context = LocalContext.current
     val grades by academicViewModel.grades.collectAsState()
     val targetGpa by academicViewModel.targetGpa.collectAsState()
     val remainingCredits by academicViewModel.remainingCredits.collectAsState()
@@ -38,6 +64,7 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
 
     val selectedStudyPattern by timetableViewModel.selectedStudyPattern.collectAsState()
     val studyPatterns by timetableViewModel.studyPatterns.collectAsState()
+    val subjectSpecs by timetableViewModel.subjectSpecs.collectAsState()
 
     val mySubjects = remember(allSubjects, selectedIds, selectedSubjectCodes) {
         val fullySelected = allSubjects.filter { selectedIds.contains(it.id) }.map { it.code }.toSet()
@@ -47,6 +74,8 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
 
     var showAddDialog by remember { mutableStateOf(false) }
     var editingGrade by remember { mutableStateOf<CourseGrade?>(null) }
+    var prefilledSemester by remember { mutableStateOf("Current") }
+    var prefilledCode by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Academic & GPA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
@@ -85,7 +114,6 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                     studyPatterns.find { 
                         it.programCode == selectedStudyPattern["program"] &&
                         it.studyPattern == selectedStudyPattern["pattern"] &&
-                        it.semester == selectedStudyPattern["semester"] &&
                         it.cantonesePutonghua == selectedStudyPattern["cantonese"] &&
                         it.engLevel == selectedStudyPattern["eng"]
                     }
@@ -96,19 +124,42 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                 
                 val clusterAreas = listOf("A", "M", "N", "E", "D")
                 
-                val totalEarned = grades.sumOf { it.credits }
+                // Only count credits for grades that are NOT "F"
+                val passingGrades = grades.filter { it.grade != "F" }
+                val totalEarned = passingGrades.sumOf { it.credits }
                 
-                // Only count Electives for the specific categories as requested
-                val earnedDS = grades.filter { it.geDs == "DS" && it.compulsoryElective == "Elective" }.sumOf { it.credits }
-                val earnedGEElectives = grades.filter { it.geDs == "GE" && it.compulsoryElective == "Elective" }.sumOf { it.credits }
+                // Graduation requirements matching user criteria
+                // Only count Electives for both DS and GE credits. F grades don't count.
+                // Cluster Area is null or Compulsory/Elective is Compulsory should not be count as a elective credit
+                val earnedDS = passingGrades.filter { 
+                    it.geDs == "DS" && 
+                    it.compulsoryElective == "Elective" && 
+                    it.cluster.isNotBlank() 
+                }.sumOf { it.credits }
+
+                val earnedGEElectives = passingGrades.filter { 
+                    it.geDs == "GE" && 
+                    it.compulsoryElective == "Elective" && 
+                    it.cluster.isNotBlank() 
+                }.sumOf { it.credits }
                 
-                // Clusters completed (unique areas). Compulsory subjects with clusters do NOT count here based on "compulsory only count in total"
-                val completedClusters = grades.filter { it.cluster in clusterAreas && it.compulsoryElective == "Elective" }
-                    .map { it.cluster }.distinct().size
+                // Clusters completed (unique areas). Only Electives count for clusters. F grades don't count.
+                // Also ensures Cluster Area is not null/blank and status is Elective.
+                val clusterGrades = passingGrades.filter { 
+                    it.cluster in clusterAreas && 
+                    it.cluster.isNotBlank() && 
+                    it.compulsoryElective == "Elective" 
+                }
+                val completedClusterNames = clusterGrades.map { it.cluster }.distinct()
+                val completedClusters = completedClusterNames.size
+                val hasClusterM = completedClusterNames.contains("M")
+
+                // Graduation rule: 5 areas total, OR 4 areas if it includes Cluster M
+                val requiredClusters = if (hasClusterM && completedClusters >= 4) 4 else 5
 
                 val displayReqs = mutableListOf(
                     GraduationRequirement("Total Credits", totalCreditsGoal, totalEarned),
-                    GraduationRequirement("Cluster Areas", 5, completedClusters)
+                    GraduationRequirement("Cluster Areas", requiredClusters, completedClusters)
                 )
                 
                 if (dsElectiveReq > 0) displayReqs.add(GraduationRequirement("DS Electives", dsElectiveReq, earnedDS))
@@ -132,6 +183,44 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                         )
                     }
                 }
+
+                // Graduation Status Notice
+                val missingCredits = (totalCreditsGoal - totalEarned).coerceAtLeast(0)
+                val missingDS = (dsElectiveReq - earnedDS).coerceAtLeast(0)
+                val missingGE = (geElectiveReq - earnedGEElectives).coerceAtLeast(0)
+                val missingClusters = clusterAreas.filter { it !in completedClusterNames }
+                
+                val isGraduated = missingCredits == 0 && (completedClusters >= requiredClusters) && missingDS == 0 && missingGE == 0
+
+                if (!isGraduated) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Graduation Checklist (Missing):", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            if (missingCredits > 0) Text("• $missingCredits more credits required", style = MaterialTheme.typography.bodySmall)
+                            if (missingDS > 0) Text("• $missingDS credits of DS Electives missing", style = MaterialTheme.typography.bodySmall)
+                            if (missingGE > 0) Text("• $missingGE credits of GE Electives missing", style = MaterialTheme.typography.bodySmall)
+                            if (missingClusters.isNotEmpty() && completedClusters < requiredClusters) {
+                                Text("• Missing Areas: ${missingClusters.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = Color(0xFFE8F5E9),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Add, null, tint = Color(0xFF2E7D32)) // Placeholder for check icon
+                            Spacer(Modifier.width(8.dp))
+                            Text("Requirements Met! You are ready to graduate.", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                        }
+                    }
+                }
             }
         }
 
@@ -153,119 +242,214 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
             Text("Course Grades", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             FilledTonalButton(onClick = {
                 editingGrade = null
+                prefilledCode = ""
+                prefilledSemester = "Current"
                 showAddDialog = true
             }, shape = RoundedCornerShape(12.dp)) {
                 Icon(Icons.Default.Add, null)
                 Spacer(Modifier.width(4.dp))
-                Text("Add Grade")
+                Text("Add Extra")
             }
         }
 
-        if (grades.isEmpty()) {
-            Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
-                Text("No grades added yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        var selectedSemester by remember { mutableStateOf<String?>(null) }
+        val patternRows = remember(studyPatterns, selectedStudyPattern) {
+            val baseRows = studyPatterns.filter {
+                it.programCode == selectedStudyPattern["program"] &&
+                it.studyPattern == selectedStudyPattern["pattern"] &&
+                it.cantonesePutonghua == selectedStudyPattern["cantonese"] &&
+                it.engLevel == selectedStudyPattern["eng"]
+            }
+            var lastSem = ""
+            baseRows.map { row ->
+                if (row.semester.isNotBlank()) lastSem = row.semester
+                row.copy(semester = lastSem)
             }
         }
+        val programTitle = selectedStudyPattern["programTitle"] ?: ""
+        val semesters = patternRows.map { it.semester }.distinct().sortedBy { it.toIntOrNull() ?: 0 }
 
-        grades.forEach { grade ->
-            Card(
-                Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                shape = RoundedCornerShape(12.dp)
+        // EXCLUDE any grade assigned to a specific semester from "Other Courses"
+        val consumedGradeIds = remember(grades) {
+            grades.filter { it.semester.startsWith("Sem ") }.map { it.id }.toSet()
+        }
+
+        if (selectedStudyPattern.isEmpty()) {
+            Card(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Text("Select your program in Profile to see semester classification.", 
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(grade.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        val desc = academicViewModel.getGradeDescription(grade.grade)
-                        val details = listOfNotNull(
-                            grade.cluster.ifBlank { null },
-                            grade.compulsoryElective.ifBlank { null },
-                            desc.ifBlank { null }
-                        ).joinToString(" • ")
-                        
-                        Text(
-                            "${grade.credits} Credits${if(details.isNotEmpty()) " • $details" else ""}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                items(semesters) { sem ->
+                    val isSelected = selectedSemester == sem
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedSemester = if (isSelected) null else sem },
+                        label = { Text("Sem $sem", fontWeight = FontWeight.Bold) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                         )
-                        if (grade.program.isNotBlank()) {
-                            Text("Programme: ${grade.program}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                        }
-                    }
-                    Text(
-                        grade.grade,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 8.dp)
                     )
-                    IconButton(onClick = {
-                        editingGrade = grade
-                        showAddDialog = true
-                    }) { Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.outline) }
-                    IconButton(onClick = { academicViewModel.removeGrade(grade.id) }) { Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error) }
                 }
             }
-        }
 
-        Spacer(Modifier.height(24.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Deadlines", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            var showDeadlineDialog by remember { mutableStateOf(false) }
-            IconButton(onClick = { showDeadlineDialog = true }) { Icon(Icons.Default.Add, null) }
-
-            if (showDeadlineDialog) {
-                var title by remember { mutableStateOf("") }
-                var dateStr by remember { mutableStateOf("2024-12-31") }
-                AlertDialog(
-                    onDismissRequest = { showDeadlineDialog = false },
-                    title = { Text("Add Deadline") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Task Title") }, shape = RoundedCornerShape(12.dp))
-                            OutlinedTextField(value = dateStr, onValueChange = { dateStr = it }, label = { Text("Due Date (YYYY-MM-DD)") }, shape = RoundedCornerShape(12.dp))
+            selectedSemester?.let { sem ->
+                val semRows = patternRows.filter { it.semester == sem }
+                val semGrades = grades.filter { it.semester == "Sem $sem" }
+                val matchedGradeIdsForThisSem = mutableSetOf<String>()
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Semester $sem", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            FilledTonalButton(
+                                onClick = {
+                                    editingGrade = null
+                                    prefilledCode = ""
+                                    prefilledSemester = "Sem $sem"
+                                    showAddDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Add Course", style = MaterialTheme.typography.labelLarge)
+                            }
                         }
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            try {
-                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                val date = sdf.parse(dateStr)
-                                if (date != null) {
-                                    val deadline = Deadline(title = title, dueDate = date.time, courseCode = "")
-                                    academicViewModel.addDeadline(deadline)
-                                    NotificationHelper.scheduleDeadlineReminder(context, deadline)
+
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp), thickness = 0.5.dp)
+
+                        semRows.forEach { row ->
+                            val spec = subjectSpecs.find { 
+                                it.code == row.subjectCode && (it.programme.isBlank() || it.programme.equals(programTitle, true))
+                            } ?: subjectSpecs.find { it.code == row.subjectCode }
+                            
+                            val matchingGrade = semGrades.find { it.code == row.subjectCode }
+                            if (matchingGrade != null) matchedGradeIdsForThisSem.add(matchingGrade.id)
+
+                            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(row.subjectCode, fontWeight = FontWeight.Bold)
+                                    if (spec != null) Text(spec.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                            } catch (e: Exception) {}
-                            showDeadlineDialog = false
-                        }, shape = RoundedCornerShape(12.dp)) { Text("Add") }
+                                if (matchingGrade != null) {
+                                    Text(matchingGrade.grade, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                                    IconButton(onClick = {
+                                        editingGrade = matchingGrade
+                                        showAddDialog = true
+                                    }) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp)) }
+                                } else {
+                                    TextButton(onClick = {
+                                        editingGrade = null
+                                        prefilledCode = row.subjectCode
+                                        prefilledSemester = "Sem $sem"
+                                        showAddDialog = true
+                                    }) {
+                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Add Grade")
+                                    }
+                                }
+                            }
+                        }
+
+                        val extraSemGrades = semGrades.filter { !matchedGradeIdsForThisSem.contains(it.id) }
+                        if (extraSemGrades.isNotEmpty()) {
+                            HorizontalDivider(Modifier.padding(vertical = 8.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                            Text("Additional Courses", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(vertical = 4.dp))
+                            extraSemGrades.forEach { grade ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(grade.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                        Text("${grade.credits} Credits • ${grade.cluster}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(grade.grade, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    IconButton(onClick = {
+                                        editingGrade = grade
+                                        showAddDialog = true
+                                    }) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) }
+                                    IconButton(onClick = { academicViewModel.removeGrade(grade.id) }) { 
+                                        Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error) 
+                                    }
+                                }
+                            }
+                        }
+
+                        val geElectives = semRows.map { it.geElective }.firstOrNull { it.isNotBlank() }
+                        val geDsElectives = semRows.map { it.geDsElective }.firstOrNull { it.isNotBlank() }
+                        val dsElectives = semRows.map { it.dsElective }.firstOrNull { it.isNotBlank() }
+
+                        if (!geElectives.isNullOrBlank() || !geDsElectives.isNullOrBlank() || !dsElectives.isNullOrBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.infoContainer.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    if (!geElectives.isNullOrBlank()) Text("• You need to add $geElectives more GE Elective in this semester", style = MaterialTheme.typography.labelSmall)
+                                    if (!geDsElectives.isNullOrBlank()) Text("• You need to add $geDsElectives more GE or DS Elective in this semester", style = MaterialTheme.typography.labelSmall)
+                                    if (!dsElectives.isNullOrBlank()) Text("• You need to add $dsElectives more DS Elective in this semester", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
                     }
-                )
+                }
             }
         }
 
-        val deadlines by academicViewModel.deadlines.collectAsState()
-        deadlines.forEach { deadline ->
-            Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)), shape = RoundedCornerShape(12.dp)) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(deadline.title, fontWeight = FontWeight.Bold)
-                        Text("Due: ${java.text.SimpleDateFormat("MMM dd, yyyy", Locale.US).format(java.util.Date(deadline.dueDate))}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    IconButton(onClick = { academicViewModel.removeDeadline(deadline.id) }) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
-                }
+        val otherGrades = grades.filter { !consumedGradeIds.contains(it.id) }
+        if (otherGrades.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text("Other Courses", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+            otherGrades.forEach { grade ->
+                GradeItem(grade, academicViewModel) { editingGrade = it; showAddDialog = true }
             }
         }
     }
 
     if (showAddDialog) {
-        var code by remember(editingGrade) { mutableStateOf(editingGrade?.code ?: "") }
-        var creds by remember(editingGrade) { mutableStateOf(editingGrade?.credits?.toString() ?: "3") }
-        var gradeValue by remember(editingGrade) { mutableStateOf(editingGrade?.grade ?: "A") }
-        var cluster by remember(editingGrade) { mutableStateOf(editingGrade?.cluster ?: "") }
+        var code by remember(editingGrade, prefilledCode) { mutableStateOf(prefilledCode) }
+        var creds by remember(editingGrade) { mutableStateOf("3") }
+        var gradeValue by remember(editingGrade) { mutableStateOf("A") }
+        var cluster by remember(editingGrade) { mutableStateOf("") }
+        var semester by remember(editingGrade, prefilledSemester) { mutableStateOf(prefilledSemester) }
 
-        val matchedSubject = remember(code, allSubjects) { 
+        LaunchedEffect(editingGrade, prefilledSemester) {
+            if (editingGrade != null) {
+                code = editingGrade?.code ?: ""
+                creds = editingGrade?.credits?.toString() ?: "3"
+                gradeValue = editingGrade?.grade ?: "A"
+                cluster = editingGrade?.cluster ?: ""
+                semester = editingGrade?.semester ?: "Current"
+            } else {
+                semester = prefilledSemester
+                code = prefilledCode
+            }
+        }
+
+        val matchedSubject = remember(code, allSubjects, subjectSpecs) { 
             allSubjects.find { it.code.equals(code.trim(), true) } 
+            ?: subjectSpecs.find { it.code.equals(code.trim(), true) }?.let { spec ->
+                hkcc.helper.data.Subject(
+                    code = spec.code, name = spec.title, credits = spec.credit.toIntOrNull() ?: 3,
+                    cluster = spec.clusterArea, clusterArea = spec.clusterArea, 
+                    compulsoryElective = spec.compulsoryElective, geDs = spec.geDs,
+                    program = spec.programme, classNo = "", subGroup = "", type = "", 
+                    dayOfWeek = "", startTime = "", endTime = "", campus = "", venue = "", lecturer = ""
+                )
+            }
         }
 
         LaunchedEffect(matchedSubject) {
@@ -276,9 +460,7 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                     matchedSubject.geDs == "GE" && matchedSubject.clusterArea.isBlank() -> "GS"
                     else -> matchedSubject.clusterArea.ifBlank { matchedSubject.cluster }
                 }
-                if (autoValue.isNotBlank()) {
-                    cluster = autoValue
-                }
+                if (autoValue.isNotBlank()) cluster = autoValue
                 creds = matchedSubject.credits.toString()
             }
         }
@@ -288,10 +470,7 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
         )
 
         AlertDialog(
-            onDismissRequest = {
-                showAddDialog = false
-                editingGrade = null
-            },
+            onDismissRequest = { showAddDialog = false; editingGrade = null },
             title = { Text(if (editingGrade == null) "Add Course Grade" else "Edit Course Grade", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -299,6 +478,7 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                         Text("Select Enrolled Course:", style = MaterialTheme.typography.labelSmall)
                         LazyRow(modifier = Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(mySubjects) { sub ->
+                                val isEntered = grades.any { it.code == sub.code }
                                 FilterChip(
                                     selected = code == sub.code,
                                     onClick = {
@@ -311,80 +491,77 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                                         }
                                         creds = sub.credits.toString()
                                     },
-                                    label = { Text(sub.code) }
+                                    label = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(sub.code)
+                                            if (isEntered) {
+                                                Spacer(Modifier.width(4.dp))
+                                                Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                    }
                                 )
                             }
                         }
                     }
                     OutlinedTextField(value = code, onValueChange = { code = it.uppercase() }, label = { Text("Course Code") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
                     OutlinedTextField(
-                        value = creds, 
-                        onValueChange = { if (matchedSubject == null) creds = it }, 
-                        label = { Text("Credits") }, 
-                        modifier = Modifier.fillMaxWidth(), 
-                        singleLine = true, 
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = matchedSubject == null,
-                        supportingText = if (matchedSubject != null) { { Text("Locked by subject specification") } } else null
+                        value = creds, onValueChange = { if (matchedSubject == null) creds = it }, 
+                        label = { Text("Credits") }, modifier = Modifier.fillMaxWidth(), 
+                        singleLine = true, shape = RoundedCornerShape(12.dp), enabled = matchedSubject == null
                     )
-
                     Text("Select Grade:", style = MaterialTheme.typography.labelSmall)
-                    val gradesList = listOf("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "F")
-                    LazyRow(modifier = Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val gradesList = listOf("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "F", "P")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(gradesList) { g ->
-                            FilterChip(
-                                selected = gradeValue == g,
-                                onClick = { gradeValue = g },
-                                label = { Text(g) }
-                            )
+                            FilterChip(selected = gradeValue == g, onClick = { gradeValue = g }, label = { Text(g) })
                         }
                     }
-
                     OutlinedTextField(
-                        value = cluster, 
-                        onValueChange = { if (!isClusterLocked) cluster = it }, 
-                        label = { Text("Cluster (e.g. DS, GS, Area 1)") }, 
-                        modifier = Modifier.fillMaxWidth(), 
-                        singleLine = true, 
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = !isClusterLocked,
-                        supportingText = if (isClusterLocked) { { Text("Locked by subject specification") } } else null,
-                        trailingIcon = if (isClusterLocked) { { Icon(Icons.Default.Lock, null, modifier = Modifier.size(18.dp)) } } else null
+                        value = cluster, onValueChange = { if (!isClusterLocked) cluster = it }, 
+                        label = { Text("Cluster or DS") }, modifier = Modifier.fillMaxWidth(),
+                        singleLine = true, shape = RoundedCornerShape(12.dp), enabled = !isClusterLocked
                     )
+                    OutlinedTextField(value = semester, onValueChange = { semester = it }, label = { Text("Semester") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     if (code.isNotBlank()) {
-                        val spec = allSubjects.find { it.code == code }
+                        // Find spec from either current subjects or the full specification list
+                        val specFromAll = allSubjects.find { it.code.equals(code, true) }
+                        val specFromList = subjectSpecs.find { it.code.equals(code, true) }
+                        
+                        val finalCompulsoryStatus = specFromAll?.compulsoryElective 
+                            ?: specFromList?.compulsoryElective 
+                            ?: if (cluster.isBlank()) "Compulsory" else "Elective"
+                            
+                        val finalGeDs = specFromAll?.geDs 
+                            ?: specFromList?.geDs 
+                            ?: when {
+                                cluster.uppercase() == "DS" -> "DS"
+                                cluster.uppercase() in listOf("A", "M", "N", "E", "D", "GS") -> "GE"
+                                else -> ""
+                            }
+
                         val newGrade = CourseGrade(
                             id = editingGrade?.id ?: java.util.UUID.randomUUID().toString(),
-                            code = code,
-                            name = "",
+                            code = code, 
+                            name = specFromList?.title ?: specFromAll?.name ?: "", 
                             credits = creds.toIntOrNull() ?: 3,
-                            grade = gradeValue,
-                            semester = editingGrade?.semester ?: "Current",
-                            cluster = cluster.ifBlank { spec?.clusterArea ?: "" },
-                            compulsoryElective = spec?.compulsoryElective ?: "",
-                            geDs = spec?.geDs ?: "",
-                            program = spec?.program ?: ""
+                            grade = gradeValue, 
+                            semester = semester,
+                            cluster = cluster.uppercase(),
+                            compulsoryElective = finalCompulsoryStatus,
+                            geDs = finalGeDs,
+                            program = specFromList?.programme ?: specFromAll?.program ?: ""
                         )
-                        if (editingGrade == null) {
-                            academicViewModel.addGrade(newGrade)
-                        } else {
-                            academicViewModel.updateGrade(newGrade)
-                        }
-                        showAddDialog = false
-                        editingGrade = null
+                        if (editingGrade == null) academicViewModel.addGrade(newGrade) else academicViewModel.updateGrade(newGrade)
+                        showAddDialog = false; editingGrade = null
                     }
                 }, shape = RoundedCornerShape(12.dp)) { Text(if (editingGrade == null) "Add" else "Save Changes") }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    showAddDialog = false
-                    editingGrade = null
-                }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showAddDialog = false; editingGrade = null }) { Text("Cancel") } }
         )
     }
 }

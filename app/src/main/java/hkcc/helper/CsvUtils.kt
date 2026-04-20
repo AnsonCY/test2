@@ -11,14 +11,17 @@ fun parseCsvLine(line: String): List<String> {
     var inQuotes = false
     var i = 0
     while (i < line.length) {
-        val c = line[i]
-        if (c == '\"') {
-            inQuotes = !inQuotes
-        } else if (c == ',' && !inQuotes) {
-            result.add(current.toString().trim())
-            current = StringBuilder()
-        } else {
-            current.append(c)
+        when (val c = line[i]) {
+            '\"' -> {
+                inQuotes = !inQuotes
+            }
+            ',' if !inQuotes -> {
+                result.add(current.toString().trim())
+                current = StringBuilder()
+            }
+            else -> {
+                current.append(c)
+            }
         }
         i++
     }
@@ -33,7 +36,7 @@ fun parseCsvStream(inputStream: InputStream, specList: List<SubjectSpec> = empty
         var curCode = ""; var curName = ""; var curClass = ""
         reader.useLines { lines ->
             lines.forEach { line ->
-                var t = if (line.contains("\t")) line.split("\t").map { it.trim() } else parseCsvLine(line)
+                val t = if (line.contains("\t")) line.split("\t").map { it.trim() } else parseCsvLine(line)
                 if (t.size >= 7) {
                     if (t[0].isNotEmpty()) curCode = t[0]; if (t[1].isNotEmpty()) curName = t[1]; if (t[2].isNotEmpty()) curClass = t[2]
                     if (curCode.contains("Subject Code", true)) return@forEach
@@ -110,6 +113,9 @@ data class StudyPatternRow(
     val requiredCredit: String,
     val studyPattern: String,
     val subjectCode: String,
+    val geElective: String,
+    val geDsElective: String,
+    val dsElective: String,
     val cantonesePutonghua: String,
     val engLevel: String,
     val totalDs: String,
@@ -125,6 +131,9 @@ fun parseStudyPatternCsv(inputStream: InputStream): List<StudyPatternRow> {
         var lastSemester = ""
         var lastRequiredCredit = ""
         var lastStudyPattern = ""
+        var lastGeElective = ""
+        var lastGeDsElective = ""
+        var lastDsElective = ""
         var lastCantonesePutonghua = ""
         var lastEngLevel = ""
         var lastTotalDs = ""
@@ -143,6 +152,11 @@ fun parseStudyPatternCsv(inputStream: InputStream): List<StudyPatternRow> {
                     // Subject code is at index 5
                     val subjectCode = t[5]
                     
+                    // Electives at 6, 7, 8
+                    if (t[6].isNotEmpty()) lastGeElective = t[6] else if (t[0].isNotEmpty()) lastGeElective = ""
+                    if (t[7].isNotEmpty()) lastGeDsElective = t[7] else if (t[0].isNotEmpty()) lastGeDsElective = ""
+                    if (t[8].isNotEmpty()) lastDsElective = t[8] else if (t[0].isNotEmpty()) lastDsElective = ""
+
                     // Cantonese/Putonghua is at index 9, Eng Level at 10
                     if (t[9].isNotEmpty()) lastCantonesePutonghua = t[9]
                     if (t[10].isNotEmpty()) lastEngLevel = t[10]
@@ -159,6 +173,9 @@ fun parseStudyPatternCsv(inputStream: InputStream): List<StudyPatternRow> {
                             requiredCredit = lastRequiredCredit,
                             studyPattern = lastStudyPattern,
                             subjectCode = subjectCode,
+                            geElective = lastGeElective,
+                            geDsElective = lastGeDsElective,
+                            dsElective = lastDsElective,
                             cantonesePutonghua = lastCantonesePutonghua,
                             engLevel = lastEngLevel,
                             totalDs = lastTotalDs,

@@ -4,15 +4,11 @@ import android.annotation.SuppressLint
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -69,26 +65,28 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
 
     init {
         viewModelScope.launch {
-            loadFromDisk()
+            loadFromDisk() // Suspend until data is fully loaded
             isLoaded = true
             
             // Auto-save logic: watch all state changes and save to disk automatically
+            // We only start saving AFTER isLoaded is true
             combine(_grades, _deadlines, _targetGpa, _remainingCredits) { g, d, t, r ->
                 Unit
-            }.drop(1) // Skip the first emission from initial load
-                .debounce(500) // Don't save too often while typing
+            }.debounce(1000) // Give it a second to settle
                 .collect {
-                    saveToDisk()
+                    if (isLoaded) {
+                        saveToDisk()
+                    }
                 }
         }
     }
 
     fun addGrade(course: CourseGrade) {
         _grades.update { list ->
-            // If code already exists, replace it (treat as update), otherwise add
-            val exists = list.any { it.code.equals(course.code, true) }
+            // If code AND semester already exists, replace it, otherwise add
+            val exists = list.any { it.code.equals(course.code, true) && it.semester == course.semester }
             if (exists) {
-                list.map { if (it.code.equals(course.code, true)) course else it }
+                list.map { if (it.code.equals(course.code, true) && it.semester == course.semester) course else it }
             } else {
                 list + course
             }
@@ -181,85 +179,83 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
 
     private val fileName = "academic_data.json"
 
-    private fun saveToDisk() {
-        viewModelScope.launch {
-            try {
-                val array = JSONArray()
-                _grades.value.forEach { g ->
-                    val obj = JSONObject()
-                    obj.put("id", g.id)
-                    obj.put("code", g.code)
-                    obj.put("name", g.name)
-                    obj.put("credits", g.credits)
-                    obj.put("grade", g.grade)
-                    obj.put("semester", g.semester)
-                    obj.put("cluster", g.cluster)
-                    obj.put("compulsoryElective", g.compulsoryElective)
-                    obj.put("geDs", g.geDs)
-                    obj.put("program", g.program)
-                    array.put(obj)
-                }
-                
-                val dArray = JSONArray()
-                _deadlines.value.forEach { d ->
-                    val obj = JSONObject()
-                    obj.put("id", d.id)
-                    obj.put("title", d.title)
-                    obj.put("dueDate", d.dueDate)
-                    obj.put("courseCode", d.courseCode)
-                    dArray.put(obj)
-                }
+    private suspend fun saveToDisk() = withContext(Dispatchers.IO) {
+        try {
+            val array = JSONArray()
+            _grades.value.forEach { g ->
+                val obj = JSONObject()
+                obj.put("id", g.id)
+                obj.put("code", g.code)
+                obj.put("name", g.name)
+                obj.put("credits", g.credits)
+                obj.put("grade", g.grade)
+                obj.put("semester", g.semester)
+                obj.put("cluster", g.cluster)
+                obj.put("compulsoryElective", g.compulsoryElective)
+                obj.put("geDs", g.geDs)
+                obj.put("program", g.program)
+                array.put(obj)
+            }
+            
+            val dArray = JSONArray()
+            _deadlines.value.forEach { d ->
+                val obj = JSONObject()
+                obj.put("id", d.id)
+                obj.put("title", d.title)
+                obj.put("dueDate", d.dueDate)
+                obj.put("courseCode", d.courseCode)
+                dArray.put(obj)
+            }
 
-                val root = JSONObject()
-                root.put("grades", array)
-                root.put("deadlines", dArray)
-                root.put("targetGpa", _targetGpa.value)
-                root.put("remainingCredits", _remainingCredits.value)
+            val root = JSONObject()
+            root.put("grades", array)
+            root.put("deadlines", dArray)
+            root.put("targetGpa", _targetGpa.value)
+            root.put("remainingCredits", _remainingCredits.value)
 
-                getApplication<Application>().openFileOutput(fileName, android.content.Context.MODE_PRIVATE).use {
-                    it.write(root.toString().toByteArray())
-                }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+            getApplication<Application>().openFileOutput(fileName, android.content.Context.MODE_PRIVATE).use {
+                it.write(root.toString().toByteArray())
+            }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun loadFromDisk() {
-        viewModelScope.launch {
-            try {
-                val file = File(getApplication<Application>().filesDir, fileName)
-                if (!file.exists()) return@launch
-                val content = getApplication<Application>().openFileInput(fileName).bufferedReader().use { it.readText() }
-                val root = JSONObject(content)
-                
-                val array = root.optJSONArray("grades") ?: JSONArray()
-                val list = mutableListOf<CourseGrade>()
-                for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    list.add(CourseGrade(
-                        obj.getString("id"), obj.getString("code"), obj.getString("name"),
-                        obj.getInt("credits"), obj.getString("grade"), obj.getString("semester"),
-                        obj.optString("cluster", ""),
-                        obj.optString("compulsoryElective", ""),
-                        obj.optString("geDs", ""),
-                        obj.optString("program", "")
-                    ))
-                }
+    private suspend fun loadFromDisk() = withContext(Dispatchers.IO) {
+        try {
+            val file = File(getApplication<Application>().filesDir, fileName)
+            if (!file.exists()) return@withContext
+            val content = getApplication<Application>().openFileInput(fileName).bufferedReader().use { it.readText() }
+            val root = JSONObject(content)
+            
+            val array = root.optJSONArray("grades") ?: JSONArray()
+            val list = mutableListOf<CourseGrade>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(CourseGrade(
+                    obj.getString("id"), obj.getString("code"), obj.getString("name"),
+                    obj.getInt("credits"), obj.getString("grade"), obj.getString("semester"),
+                    obj.optString("cluster", ""),
+                    obj.optString("compulsoryElective", ""),
+                    obj.optString("geDs", ""),
+                    obj.optString("program", "")
+                ))
+            }
+
+            val dArray = root.optJSONArray("deadlines") ?: JSONArray()
+            val dList = mutableListOf<Deadline>()
+            for (i in 0 until dArray.length()) {
+                val obj = dArray.getJSONObject(i)
+                dList.add(Deadline(
+                    obj.getString("id"), obj.getString("title"),
+                    obj.getLong("dueDate"), obj.getString("courseCode")
+                ))
+            }
+
+            withContext(Dispatchers.Main) {
                 _grades.value = list
-
-                val dArray = root.optJSONArray("deadlines") ?: JSONArray()
-                val dList = mutableListOf<Deadline>()
-                for (i in 0 until dArray.length()) {
-                    val obj = dArray.getJSONObject(i)
-                    dList.add(Deadline(
-                        obj.getString("id"), obj.getString("title"),
-                        obj.getLong("dueDate"), obj.getString("courseCode")
-                    ))
-                }
                 _deadlines.value = dList
-
                 _targetGpa.value = root.optString("targetGpa", "3.0")
                 _remainingCredits.value = root.optString("remainingCredits", "30")
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }

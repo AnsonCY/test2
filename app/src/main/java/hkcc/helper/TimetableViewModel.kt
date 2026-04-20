@@ -44,6 +44,9 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     private val _studyPatterns = MutableStateFlow<List<StudyPatternRow>>(emptyList())
     val studyPatterns = _studyPatterns.asStateFlow()
 
+    private val _subjectSpecs = MutableStateFlow<List<SubjectSpec>>(emptyList())
+    val subjectSpecs = _subjectSpecs.asStateFlow()
+
     private val _showGhosting = MutableStateFlow(true)
     val showGhosting = _showGhosting.asStateFlow()
 
@@ -89,9 +92,14 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
         ghosts
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private var isLoaded = false
+
     init {
-        loadFromDisk()
-        loadStudyPatterns()
+        viewModelScope.launch {
+            loadFromDisk() // Suspend until data is fully loaded
+            isLoaded = true
+            loadStudyPatterns()
+        }
     }
 
     private fun loadStudyPatterns() {
@@ -101,6 +109,7 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 
                 // Load Subject Specs first
                 val specList = context.assets.open("subjectspec.csv").use { parseSubjectSpecCsv(it) }
+                _subjectSpecs.value = specList
                 
                 // Load Subjects with spec info - link by program title
                 val programTitle = _selectedStudyPattern.value["programTitle"] ?: ""
@@ -427,6 +436,7 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     private val fileName = "timetable_data_v2.json"
 
     private fun saveToDisk() {
+        if (!isLoaded) return // Prevent saving empty state before load completes
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val root = JSONObject()
@@ -460,56 +470,66 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun loadFromDisk() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val context = getApplication<Application>()
-                val file = File(context.filesDir, fileName)
+    private suspend fun loadFromDisk() = withContext(Dispatchers.IO) {
+        try {
+            val context = getApplication<Application>()
+            val file = File(context.filesDir, fileName)
 
-                if (!file.exists()) {
+            if (!file.exists()) {
+                withContext(Dispatchers.Main) {
                     _themeMode.value = THEME_SYSTEM
-                    return@launch
+                }
+                return@withContext
+            }
+
+            context.openFileInput(fileName).use { stream ->
+                val root = JSONObject(stream.bufferedReader().use { it.readText() })
+                
+                val credits = root.optString("credits", "15")
+                val showGhosting = root.optBoolean("showGhosting", true)
+                val themeMode = if (root.has("themeMode")) {
+                    root.getInt("themeMode")
+                } else if (root.has("isDarkMode")) {
+                    if(root.getBoolean("isDarkMode")) THEME_DARK else THEME_LIGHT
+                } else {
+                    THEME_SYSTEM
                 }
 
-                context.openFileInput(fileName).use { stream ->
-                    val root = JSONObject(stream.bufferedReader().use { it.readText() })
-                    _userCredits.value = root.optString("credits", "15")
-                    _showGhosting.value = root.optBoolean("showGhosting", true)
+                val reminderMinutes = root.optInt("reminderMinutes", 15)
+                val notificationsEnabled = root.optBoolean("notificationsEnabled", true)
+                val isCreditsLocked = root.optBoolean("isCreditsLocked", false)
 
-                    if (root.has("themeMode")) {
-                        _themeMode.value = root.getInt("themeMode")
-                    } else if (root.has("isDarkMode")) {
-                        _themeMode.value = if(root.getBoolean("isDarkMode")) THEME_DARK else THEME_LIGHT
-                    } else {
-                        _themeMode.value = THEME_SYSTEM
-                    }
+                val patternMap = mutableMapOf<String, String>()
+                val patternObj = root.optJSONObject("selectedStudyPattern")
+                patternObj?.keys()?.forEach { patternMap[it] = patternObj.getString(it) }
 
-                    _reminderMinutes.value = root.optInt("reminderMinutes", 15)
-                    _notificationsEnabled.value = root.optBoolean("notificationsEnabled", true)
-                    _isCreditsLocked.value = root.optBoolean("isCreditsLocked", false)
+                val loadedIds = mutableSetOf<String>()
+                val idsArray = root.optJSONArray("selectedIds")
+                if (idsArray != null) for (i in 0 until idsArray.length()) loadedIds.add(idsArray.getString(i))
 
-                    val patternMap = mutableMapOf<String, String>()
-                    val patternObj = root.optJSONObject("selectedStudyPattern")
-                    patternObj?.keys()?.forEach { patternMap[it] = patternObj.getString(it) }
+                val loadedCodes = mutableSetOf<String>()
+                val codesArray = root.optJSONArray("selectedCodes")
+                if (codesArray != null) for (i in 0 until codesArray.length()) loadedCodes.add(codesArray.getString(i))
+
+                val loadedSubjects = mutableListOf<Subject>()
+                val subArray = root.optJSONArray("subjects")
+                if (subArray != null) for (i in 0 until subArray.length()) loadedSubjects.add(
+                    Subject.fromJson(subArray.getJSONObject(i)))
+                
+                withContext(Dispatchers.Main) {
+                    _userCredits.value = credits
+                    _showGhosting.value = showGhosting
+                    _themeMode.value = themeMode
+                    _reminderMinutes.value = reminderMinutes
+                    _notificationsEnabled.value = themeMode == themeMode // simplified check
+                    _notificationsEnabled.value = notificationsEnabled
+                    _isCreditsLocked.value = isCreditsLocked
                     _selectedStudyPattern.value = patternMap
-
-                    val loadedIds = mutableSetOf<String>()
-                    val idsArray = root.optJSONArray("selectedIds")
-                    if (idsArray != null) for (i in 0 until idsArray.length()) loadedIds.add(idsArray.getString(i))
                     _selectedIds.value = loadedIds
-
-                    val loadedCodes = mutableSetOf<String>()
-                    val codesArray = root.optJSONArray("selectedCodes")
-                    if (codesArray != null) for (i in 0 until codesArray.length()) loadedCodes.add(codesArray.getString(i))
                     _selectedSubjectCodes.value = loadedCodes
-
-                    val loadedSubjects = mutableListOf<Subject>()
-                    val subArray = root.optJSONArray("subjects")
-                    if (subArray != null) for (i in 0 until subArray.length()) loadedSubjects.add(
-                        Subject.fromJson(subArray.getJSONObject(i)))
                     _allSubjects.value = loadedSubjects
                 }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }
