@@ -16,10 +16,10 @@ data class GroupInvitation(
     val userId: String = "",
     @SerialName("user_name")
     val userName: String = "",
-    @SerialName("student_email")     // NEW FIELD
-    val studentEmail: String = "",    // NEW FIELD
-    @SerialName("phone_number")       // NEW FIELD
-    val phoneNumber: String = "",     // NEW FIELD
+    @SerialName("student_email")
+    val studentEmail: String = "",
+    @SerialName("phone_number")
+    val phoneNumber: String = "",
     @SerialName("course_code")
     val courseCode: String = "",
     @SerialName("course_name")

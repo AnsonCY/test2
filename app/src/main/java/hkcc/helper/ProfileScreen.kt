@@ -242,6 +242,32 @@ fun ProfileScreen(
                 }.map { it.engLevel }.distinct()
             }
 
+            // Science Levels for 8C112-AS
+            var selectedBio by remember { mutableStateOf(savedPattern["bio"] ?: "") }
+            var selectedChem by remember { mutableStateOf(savedPattern["chem"] ?: "") }
+            var selectedPhy by remember { mutableStateOf(savedPattern["phy"] ?: "") }
+
+            LaunchedEffect(savedPattern) {
+                if (savedPattern.isNotEmpty()) {
+                    selectedBio = savedPattern["bio"] ?: ""
+                    selectedChem = savedPattern["chem"] ?: ""
+                    selectedPhy = savedPattern["phy"] ?: ""
+                }
+            }
+
+            val bioOptions = remember(selectedProgram, studyPatterns) {
+                if (selectedProgram != "8C112-AS") emptyList() else
+                studyPatterns.filter { it.programCode == selectedProgram }.map { it.bioLevel }.distinct().filter { it.isNotBlank() }
+            }
+            val chemOptions = remember(selectedProgram, studyPatterns) {
+                if (selectedProgram != "8C112-AS") emptyList() else
+                studyPatterns.filter { it.programCode == selectedProgram }.map { it.chemLevel }.distinct().filter { it.isNotBlank() }
+            }
+            val phyOptions = remember(selectedProgram, studyPatterns) {
+                if (selectedProgram != "8C112-AS") emptyList() else
+                studyPatterns.filter { it.programCode == selectedProgram }.map { it.phyLevel }.distinct().filter { it.isNotBlank() }
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -260,16 +286,28 @@ fun ProfileScreen(
                     DropdownSelector("Cantonese/Putonghua", selectedCantonese, cantoneseOptions) { selectedCantonese = it }
                     DropdownSelector("Eng Level", selectedEngLevel, engLevels) { selectedEngLevel = it }
 
+                    if (selectedProgram == "8C112-AS") {
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                        Text("DSE Level", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        DropdownSelector("Bio Level", selectedBio, bioOptions) { selectedBio = it }
+                        DropdownSelector("Chem Level", selectedChem, chemOptions) { selectedChem = it }
+                        DropdownSelector("Phy Level", selectedPhy, phyOptions) { selectedPhy = it }
+                    }
+
                     Button(
                         onClick = {
                             val title = studyPatterns.find { it.programCode == selectedProgram }?.programTitle ?: ""
-                            viewModel.applyStudyPattern(selectedProgram, title, selectedPattern, selectedSemester, selectedCantonese, selectedEngLevel)
+                            viewModel.applyStudyPattern(
+                                selectedProgram, title, selectedPattern, selectedSemester, 
+                                selectedCantonese, selectedEngLevel, selectedBio, selectedChem, selectedPhy
+                            )
                             Toast.makeText(context, "Study pattern applied!", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = selectedProgram.isNotBlank() && selectedPattern.isNotBlank() && 
                                   selectedSemester.isNotBlank() && selectedCantonese.isNotBlank() && 
-                                  selectedEngLevel.isNotBlank()
+                                  selectedEngLevel.isNotBlank() &&
+                                  (selectedProgram != "8C112-AS" || (selectedBio.isNotBlank() && selectedChem.isNotBlank() && selectedPhy.isNotBlank()))
                     ) {
                         Text("Apply Pattern")
                     }
@@ -392,12 +430,13 @@ fun DropdownSelector(
         OutlinedTextField(
             value = selected,
             onValueChange = {},
-            readOnly = true,
+            readOnly = true, // Not editable
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
-                .menuAnchor()
+                // Fix: Added MenuAnchorType.PrimaryNotEditable
+                .menuAnchor(type = MenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
         )
 

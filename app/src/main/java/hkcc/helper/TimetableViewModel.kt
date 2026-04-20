@@ -62,6 +62,15 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
     private val _selectedStudyPattern = MutableStateFlow<Map<String, String>>(emptyMap())
     val selectedStudyPattern = _selectedStudyPattern.asStateFlow()
 
+    private val _bioLevel = MutableStateFlow("")
+    val bioLevel = _bioLevel.asStateFlow()
+
+    private val _chemLevel = MutableStateFlow("")
+    val chemLevel = _chemLevel.asStateFlow()
+
+    private val _phyLevel = MutableStateFlow("")
+    val phyLevel = _phyLevel.asStateFlow()
+
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating = _isGenerating.asStateFlow()
 
@@ -147,21 +156,42 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun applyStudyPattern(programCode: String, programTitle: String, pattern: String, semester: String, cantonesePutonghua: String, engLevel: String) {
+    fun applyStudyPattern(
+        programCode: String, 
+        programTitle: String, 
+        pattern: String, 
+        semester: String, 
+        cantonesePutonghua: String, 
+        engLevel: String,
+        bioLevel: String = "",
+        chemLevel: String = "",
+        phyLevel: String = ""
+    ) {
         _selectedStudyPattern.value = mapOf(
             "program" to programCode,
             "programTitle" to programTitle,
             "pattern" to pattern,
             "semester" to semester,
             "cantonese" to cantonesePutonghua,
-            "eng" to engLevel
+            "eng" to engLevel,
+            "bio" to bioLevel,
+            "chem" to chemLevel,
+            "phy" to phyLevel
         )
+        _bioLevel.value = bioLevel
+        _chemLevel.value = chemLevel
+        _phyLevel.value = phyLevel
+
         val rows = _studyPatterns.value.filter {
             it.programCode == programCode &&
-                    it.studyPattern == pattern &&
-                    it.semester == semester &&
-                    it.cantonesePutonghua == cantonesePutonghua &&
-                    it.engLevel == engLevel
+            it.studyPattern == pattern &&
+            it.cantonesePutonghua == cantonesePutonghua &&
+            it.engLevel == engLevel &&
+            (programCode != "8C112-AS" || (
+                (it.bioLevel.isBlank() || it.bioLevel == bioLevel) &&
+                (it.chemLevel.isBlank() || it.chemLevel == chemLevel) &&
+                (it.phyLevel.isBlank() || it.phyLevel == phyLevel)
+            ))
         }
 
         if (rows.isNotEmpty()) {
@@ -446,6 +476,9 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 root.put("reminderMinutes", _reminderMinutes.value)
                 root.put("notificationsEnabled", _notificationsEnabled.value)
                 root.put("isCreditsLocked", _isCreditsLocked.value)
+                root.put("bioLevel", _bioLevel.value)
+                root.put("chemLevel", _chemLevel.value)
+                root.put("phyLevel", _phyLevel.value)
                 
                 val patternObj = JSONObject()
                 _selectedStudyPattern.value.forEach { (k, v) -> patternObj.put(k, v) }
@@ -498,6 +531,9 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                 val reminderMinutes = root.optInt("reminderMinutes", 15)
                 val notificationsEnabled = root.optBoolean("notificationsEnabled", true)
                 val isCreditsLocked = root.optBoolean("isCreditsLocked", false)
+                val bio = root.optString("bioLevel", "")
+                val chem = root.optString("chemLevel", "")
+                val phy = root.optString("phyLevel", "")
 
                 val patternMap = mutableMapOf<String, String>()
                 val patternObj = root.optJSONObject("selectedStudyPattern")
@@ -521,9 +557,12 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
                     _showGhosting.value = showGhosting
                     _themeMode.value = themeMode
                     _reminderMinutes.value = reminderMinutes
-                    _notificationsEnabled.value = themeMode == themeMode // simplified check
+                    _notificationsEnabled.value = true // simplified check
                     _notificationsEnabled.value = notificationsEnabled
                     _isCreditsLocked.value = isCreditsLocked
+                    _bioLevel.value = bio
+                    _chemLevel.value = chem
+                    _phyLevel.value = phy
                     _selectedStudyPattern.value = patternMap
                     _selectedIds.value = loadedIds
                     _selectedSubjectCodes.value = loadedCodes
