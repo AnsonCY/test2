@@ -209,10 +209,13 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
             _userCredits.value = credits
             _isCreditsLocked.value = true
 
-            val subjectCodes = rows.map { it.subjectCode }.toSet()
+            val subjectCodes = rows
+                .filter { it.semester == semester }
+                .map { it.subjectCode }
+                .toSet()
             _selectedSubjectCodes.value = subjectCodes
             saveToDisk()
-            
+
             // Reload subjects to apply program-specific specs
             loadStudyPatterns()
         }
