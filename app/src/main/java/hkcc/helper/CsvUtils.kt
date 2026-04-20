@@ -120,9 +120,9 @@ fun parseStudyPatternCsv(inputStream: InputStream): List<StudyPatternRow> {
                         if (t[12].isNotEmpty()) lastTotalGe = t[12]
                     }
                     if (t.size >= 16) {
-                        if (t[13].isNotEmpty()) lastBio = t[13] else if (t[0].isNotEmpty()) lastBio = ""
-                        if (t[14].isNotEmpty()) lastChem = t[14] else if (t[0].isNotEmpty()) lastChem = ""
-                        if (t[15].isNotEmpty()) lastPhy = t[15] else if (t[0].isNotEmpty()) lastPhy = ""
+                        if (t[13].isNotEmpty()) lastBio = t[13]
+                        if (t[14].isNotEmpty()) lastChem = t[14]
+                        if (t[15].isNotEmpty()) lastPhy = t[15]
                     }
 
                     if (subjectCode.isNotEmpty()) {

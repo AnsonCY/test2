@@ -26,7 +26,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -56,7 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.Locale
 
-val ColorScheme.infoContainer: Color
+val infoContainer: Color
     @Composable
     get() = if (!isSystemInDarkTheme()) Color(0xFFE1F5FE) else Color(0xFF01579B)
 
@@ -289,20 +288,26 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
         val patternRows = remember(studyPatterns, selectedStudyPattern, bioLevel, chemLevel, phyLevel) {
             val baseRows = studyPatterns.filter {
                 it.programCode == selectedStudyPattern["program"] &&
-                it.studyPattern == selectedStudyPattern["pattern"] &&
-                it.cantonesePutonghua == selectedStudyPattern["cantonese"] &&
-                it.engLevel == selectedStudyPattern["eng"] &&
-                (it.programCode != "8C112-AS" || (
-                    (it.bioLevel.isBlank() || it.bioLevel == bioLevel) &&
-                    (it.chemLevel.isBlank() || it.chemLevel == chemLevel) &&
-                    (it.phyLevel.isBlank() || it.phyLevel == phyLevel)
-                ))
+                        it.studyPattern == selectedStudyPattern["pattern"] &&
+                        (selectedStudyPattern["cantonese"] == "Not set" || selectedStudyPattern["cantonese"].isNullOrBlank() || it.cantonesePutonghua.isBlank() || it.cantonesePutonghua == selectedStudyPattern["cantonese"]) &&
+                        (selectedStudyPattern["eng"] == "Not set" || selectedStudyPattern["eng"].isNullOrBlank() || it.engLevel.isBlank() || it.engLevel == selectedStudyPattern["eng"])
             }
+
+            val scienceFilteredRows = baseRows.filter {
+                it.programCode != "8C112-AS" || (
+                        (bioLevel == "Not set" || bioLevel.isBlank() || it.bioLevel.isBlank() || it.bioLevel == bioLevel) &&
+                                (chemLevel == "Not set" || chemLevel.isBlank() || it.chemLevel.isBlank() || it.chemLevel == chemLevel) &&
+                                (phyLevel == "Not set" || phyLevel.isBlank() || it.phyLevel.isBlank() || it.phyLevel == phyLevel)
+                        )
+            }
+
+            val finalRows = if (scienceFilteredRows.isNotEmpty()) scienceFilteredRows else baseRows
+
             var lastSem = ""
-            baseRows.map { row ->
+            finalRows.map { row ->
                 if (row.semester.isNotBlank()) lastSem = row.semester
                 row.copy(semester = lastSem)
-            }
+            }.distinctBy { it.subjectCode }
         }
         val programTitle = selectedStudyPattern["programTitle"] ?: ""
         val semesters = patternRows.map { it.semester }.distinct().sortedBy { it.toIntOrNull() ?: 0 }
@@ -431,7 +436,7 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
 
                         if (!geElectives.isNullOrBlank() || !geDsElectives.isNullOrBlank() || !dsElectives.isNullOrBlank()) {
                             Surface(
-                                color = MaterialTheme.colorScheme.infoContainer.copy(alpha = 0.5f),
+                                color = infoContainer.copy(alpha = 0.5f),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
                             ) {

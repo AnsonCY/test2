@@ -76,7 +76,6 @@ class AcademicViewModel(application: Application) : AndroidViewModel(application
             // Auto-save logic: watch all state changes and save to disk automatically
             // We only start saving AFTER isLoaded is true
             combine(_grades, _deadlines, _targetGpa, _remainingCredits) { g, d, t, r ->
-                Unit
             }.debounce(1000) // Give it a second to settle
                 .collect {
                     if (isLoaded) {

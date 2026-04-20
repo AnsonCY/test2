@@ -182,17 +182,24 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
         _chemLevel.value = chemLevel
         _phyLevel.value = phyLevel
 
-        val rows = _studyPatterns.value.filter {
-            it.programCode == programCode &&
-            it.studyPattern == pattern &&
-            it.cantonesePutonghua == cantonesePutonghua &&
-            it.engLevel == engLevel &&
-            (programCode != "8C112-AS" || (
-                (it.bioLevel.isBlank() || it.bioLevel == bioLevel) &&
-                (it.chemLevel.isBlank() || it.chemLevel == chemLevel) &&
-                (it.phyLevel.isBlank() || it.phyLevel == phyLevel)
-            ))
+        val baseRows = _studyPatterns.value.filter {
+            it.programCode == programCode && it.studyPattern == pattern
         }
+
+        val langFilteredRows = baseRows.filter {
+            (cantonesePutonghua.isBlank() || cantonesePutonghua == "Not set" || it.cantonesePutonghua.isBlank() || it.cantonesePutonghua == cantonesePutonghua) &&
+                    (engLevel.isBlank() || engLevel == "Not set" || it.engLevel.isBlank() || it.engLevel == engLevel)
+        }
+
+        val rowsAfterLang = langFilteredRows.ifEmpty { baseRows }
+
+        val scienceFilteredRows = rowsAfterLang.filter {
+            (bioLevel.isBlank() || bioLevel == "Not set" || it.bioLevel.isBlank() || it.bioLevel == bioLevel) &&
+                    (chemLevel.isBlank() || chemLevel == "Not set" || it.chemLevel.isBlank() || it.chemLevel == chemLevel) &&
+                    (phyLevel.isBlank() || phyLevel == "Not set" || it.phyLevel.isBlank() || it.phyLevel == phyLevel)
+        }
+
+        val rows = scienceFilteredRows.ifEmpty { rowsAfterLang }
 
         if (rows.isNotEmpty()) {
             // Clear existing selections before applying new pattern
