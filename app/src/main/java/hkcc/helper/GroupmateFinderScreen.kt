@@ -131,7 +131,10 @@ fun GroupmateFinderScreen(
     if (showCreateDialog && selectedSubject != null) {
         val subject = selectedSubject!!
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
+            onDismissRequest = {
+                showCreateDialog = false
+                invitationMessage = ""
+            },
             title = { Text("Post Invitation") },
             text = {
                 Column {
@@ -186,7 +189,10 @@ fun GroupmateFinderScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) {
+                TextButton(onClick = {
+                    showCreateDialog = false
+                    invitationMessage = ""
+                }) {
                     Text("Cancel")
                 }
             }
@@ -243,6 +249,7 @@ fun GroupmateFinderScreen(
             }
 
             // Profile info card - Display only, no edit
+            // Profile info card - Display only, no edit
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -254,7 +261,7 @@ fun GroupmateFinderScreen(
                         ) {
                             Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Name: ${viewModel.getUserName()}", fontWeight = FontWeight.Bold)
+                            Text("Name: ${viewModel.getDisplayName()}", fontWeight = FontWeight.Bold)
                         }
                         if (viewModel.getStudentEmail().isNotBlank()) {
                             Row(
@@ -276,14 +283,14 @@ fun GroupmateFinderScreen(
                                 Text(viewModel.getPhoneNumber(), style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        if (!viewModel.hasCompleteProfile()) {
+                        if (!viewModel.hasContactInfo()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Surface(
                                 color = MaterialTheme.colorScheme.errorContainer,
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(
-                                    text = "Please update your contact info in Profile page",
+                                    text = "Please enter Student ID or Phone Number in Profile page",
                                     modifier = Modifier.padding(8.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error
@@ -341,8 +348,15 @@ fun GroupmateFinderScreen(
                     CourseInvitationCard(
                         subject = subject,
                         onCreateInvitation = {
-                            selectedSubject = subject
-                            showCreateDialog = true
+                            // Check if user has contact info before allowing to post
+                            if (!viewModel.hasContactInfo()) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Please add Student ID or Phone Number in Profile first")
+                                }
+                            } else {
+                                selectedSubject = subject
+                                showCreateDialog = true
+                            }
                         },
                         onFindGroupmates = {
                             viewModel.loadInvitationsForCourse(subject.code, subject.classNo)

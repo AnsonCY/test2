@@ -30,7 +30,13 @@ class GroupmateViewModel(application: Application) : AndroidViewModel(applicatio
         Log.d("GroupmateViewModel", "ViewModel initialized")
         loadMyInvitations()
     }
+    fun getDisplayName(): String {
+        return sessionManager.getDisplayName()
+    }
 
+    fun hasContactInfo(): Boolean {
+        return sessionManager.hasContactInfo()
+    }
     // User profile methods
     fun setUserName(name: String) {
         sessionManager.currentUserName = name
