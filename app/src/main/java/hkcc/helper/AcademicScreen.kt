@@ -441,9 +441,9 @@ fun AcademicScreen(academicViewModel: AcademicViewModel = viewModel(), timetable
                                 modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
                             ) {
                                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    if (!geElectives.isNullOrBlank()) Text("• You need to add $geElectives more GE Elective in this semester", style = MaterialTheme.typography.labelSmall)
-                                    if (!geDsElectives.isNullOrBlank()) Text("• You need to add $geDsElectives more GE or DS Elective in this semester", style = MaterialTheme.typography.labelSmall)
-                                    if (!dsElectives.isNullOrBlank()) Text("• You need to add $dsElectives more DS Elective in this semester", style = MaterialTheme.typography.labelSmall)
+                                    if (!geElectives.isNullOrBlank()) Text("• You need to add $geElectives GE Elective in this semester", style = MaterialTheme.typography.labelSmall)
+                                    if (!geDsElectives.isNullOrBlank()) Text("• You need to add $geDsElectives GE or DS Elective in this semester", style = MaterialTheme.typography.labelSmall)
+                                    if (!dsElectives.isNullOrBlank()) Text("• You need to add $dsElectives DS Elective in this semester", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
