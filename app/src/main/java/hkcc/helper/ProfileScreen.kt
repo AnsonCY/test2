@@ -196,10 +196,13 @@ fun ProfileScreen(
 
         HorizontalDivider()
 
-        // Study Pattern Section
+// Study Pattern Section
         val studyPatterns by viewModel.studyPatterns.collectAsState()
         val savedPattern by viewModel.selectedStudyPattern.collectAsState()
-        
+
+        // 1. Add a state variable to control expand/collapse (default is false / collapsed)
+        var isStudyPatternExpanded by remember { mutableStateOf(false) }
+
         if (studyPatterns.isNotEmpty()) {
             var selectedProgram by remember { mutableStateOf(savedPattern["program"] ?: "") }
             var selectedPattern by remember { mutableStateOf(savedPattern["pattern"] ?: "") }
@@ -207,7 +210,6 @@ fun ProfileScreen(
             var selectedCantonese by remember { mutableStateOf(savedPattern["cantonese"] ?: "") }
             var selectedEngLevel by remember { mutableStateOf(savedPattern["eng"] ?: "") }
 
-            // Update local state when saved pattern changes (e.g. on load)
             LaunchedEffect(savedPattern) {
                 if (savedPattern.isNotEmpty()) {
                     selectedProgram = savedPattern["program"] ?: ""
@@ -219,30 +221,29 @@ fun ProfileScreen(
             }
 
             val programs = remember(studyPatterns) { studyPatterns.map { it.programCode }.distinct() }
-            val patterns = remember(selectedProgram, studyPatterns) { 
-                studyPatterns.filter { it.programCode == selectedProgram }.map { it.studyPattern }.distinct() 
+            val patterns = remember(selectedProgram, studyPatterns) {
+                studyPatterns.filter { it.programCode == selectedProgram }.map { it.studyPattern }.distinct()
             }
             val semesters = remember(selectedProgram, selectedPattern, studyPatterns) {
                 studyPatterns.filter { it.programCode == selectedProgram && it.studyPattern == selectedPattern }
                     .map { it.semester }.distinct()
             }
             val cantoneseOptions = remember(selectedProgram, selectedPattern, selectedSemester, studyPatterns) {
-                studyPatterns.filter { 
-                    it.programCode == selectedProgram && 
-                    it.studyPattern == selectedPattern && 
-                    it.semester == selectedSemester 
+                studyPatterns.filter {
+                    it.programCode == selectedProgram &&
+                            it.studyPattern == selectedPattern &&
+                            it.semester == selectedSemester
                 }.map { it.cantonesePutonghua }.distinct()
             }
             val engLevels = remember(selectedProgram, selectedPattern, selectedSemester, selectedCantonese, studyPatterns) {
                 studyPatterns.filter {
                     it.programCode == selectedProgram &&
-                    it.studyPattern == selectedPattern &&
-                    it.semester == selectedSemester &&
-                    it.cantonesePutonghua == selectedCantonese
+                            it.studyPattern == selectedPattern &&
+                            it.semester == selectedSemester &&
+                            it.cantonesePutonghua == selectedCantonese
                 }.map { it.engLevel }.distinct()
             }
 
-            // Science Levels for 8C112-AS
             var selectedBio by remember { mutableStateOf(savedPattern["bio"] ?: "") }
             var selectedChem by remember { mutableStateOf(savedPattern["chem"] ?: "") }
             var selectedPhy by remember { mutableStateOf(savedPattern["phy"] ?: "") }
@@ -257,15 +258,15 @@ fun ProfileScreen(
 
             val bioOptions = remember(selectedProgram, studyPatterns) {
                 if (selectedProgram != "8C112-AS") emptyList() else
-                studyPatterns.filter { it.programCode == selectedProgram }.map { it.bioLevel }.distinct().filter { it.isNotBlank() }
+                    studyPatterns.filter { it.programCode == selectedProgram }.map { it.bioLevel }.distinct().filter { it.isNotBlank() }
             }
             val chemOptions = remember(selectedProgram, studyPatterns) {
                 if (selectedProgram != "8C112-AS") emptyList() else
-                studyPatterns.filter { it.programCode == selectedProgram }.map { it.chemLevel }.distinct().filter { it.isNotBlank() }
+                    studyPatterns.filter { it.programCode == selectedProgram }.map { it.chemLevel }.distinct().filter { it.isNotBlank() }
             }
             val phyOptions = remember(selectedProgram, studyPatterns) {
                 if (selectedProgram != "8C112-AS") emptyList() else
-                studyPatterns.filter { it.programCode == selectedProgram }.map { it.phyLevel }.distinct().filter { it.isNotBlank() }
+                    studyPatterns.filter { it.programCode == selectedProgram }.map { it.phyLevel }.distinct().filter { it.isNotBlank() }
             }
 
             Card(
@@ -273,49 +274,71 @@ fun ProfileScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Study Pattern",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("Auto-select subjects and set graduation credits based on your program.", style = MaterialTheme.typography.bodySmall)
 
-                    DropdownSelector("Program Code", selectedProgram, programs) { selectedProgram = it }
-                    DropdownSelector("Study Pattern", selectedPattern, patterns) { selectedPattern = it }
-                    DropdownSelector("Semester", selectedSemester, semesters) { selectedSemester = it }
-                    DropdownSelector("Cantonese/Putonghua", selectedCantonese, cantoneseOptions) { selectedCantonese = it }
-                    DropdownSelector("Eng Level", selectedEngLevel, engLevels) { selectedEngLevel = it }
-
-                    if (selectedProgram == "8C112-AS") {
-                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        Text("DSE Level", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        DropdownSelector("Bio Level", selectedBio, bioOptions) { selectedBio = it }
-                        DropdownSelector("Chem Level", selectedChem, chemOptions) { selectedChem = it }
-                        DropdownSelector("Phy Level", selectedPhy, phyOptions) { selectedPhy = it }
+                    // 2. Add a Header Row with an icon button to toggle the state
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Study Pattern",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { isStudyPatternExpanded = !isStudyPatternExpanded }) {
+                            Icon(
+                                imageVector = if (isStudyPatternExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (isStudyPatternExpanded) "Shrink" else "Expand"
+                            )
+                        }
                     }
 
-                    Button(
-                        onClick = {
-                            val title = studyPatterns.find { it.programCode == selectedProgram }?.programTitle ?: ""
-                            viewModel.applyStudyPattern(
-                                selectedProgram, title, selectedPattern, selectedSemester, 
-                                selectedCantonese, selectedEngLevel, selectedBio, selectedChem, selectedPhy
-                            )
-                            Toast.makeText(context, "Study pattern applied!", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = selectedProgram.isNotBlank() && selectedPattern.isNotBlank() && 
-                                  selectedSemester.isNotBlank() && selectedCantonese.isNotBlank() && 
-                                  selectedEngLevel.isNotBlank() &&
-                                  (selectedProgram != "8C112-AS" || (selectedBio.isNotBlank() && selectedChem.isNotBlank() && selectedPhy.isNotBlank()))
-                    ) {
-                        Text("Apply Pattern")
+                    // 3. Wrap the content inside an if-statement so it only renders when expanded
+                    if (isStudyPatternExpanded) {
+                        Text("Auto-select subjects and set graduation credits based on your program.", style = MaterialTheme.typography.bodySmall)
+
+                        DropdownSelector("Program Code", selectedProgram, programs) { selectedProgram = it }
+                        DropdownSelector("Study Pattern", selectedPattern, patterns) { selectedPattern = it }
+                        DropdownSelector("Semester", selectedSemester, semesters) { selectedSemester = it }
+                        DropdownSelector("Cantonese/Putonghua", selectedCantonese, cantoneseOptions) { selectedCantonese = it }
+
+                        // --- DSE Level Section ---
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                        Text("DSE Level", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+
+                        // Eng Level applies to all programs
+                        DropdownSelector("Eng Level", selectedEngLevel, engLevels) { selectedEngLevel = it }
+
+                        // Science levels only apply to 8C112-AS
+                        if (selectedProgram == "8C112-AS") {
+                            DropdownSelector("Bio Level", selectedBio, bioOptions) { selectedBio = it }
+                            DropdownSelector("Chem Level", selectedChem, chemOptions) { selectedChem = it }
+                            DropdownSelector("Phy Level", selectedPhy, phyOptions) { selectedPhy = it }
+                        }
+
+                        Button(
+                            onClick = {
+                                val title = studyPatterns.find { it.programCode == selectedProgram }?.programTitle ?: ""
+                                viewModel.applyStudyPattern(
+                                    selectedProgram, title, selectedPattern, selectedSemester,
+                                    selectedCantonese, selectedEngLevel, selectedBio, selectedChem, selectedPhy
+                                )
+                                Toast.makeText(context, "Study pattern applied!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = selectedProgram.isNotBlank() && selectedPattern.isNotBlank() &&
+                                    selectedSemester.isNotBlank() && selectedCantonese.isNotBlank() &&
+                                    selectedEngLevel.isNotBlank() &&
+                                    (selectedProgram != "8C112-AS" || (selectedBio.isNotBlank() && selectedChem.isNotBlank() && selectedPhy.isNotBlank()))
+                        ) {
+                            Text("Apply Pattern")
+                        }
                     }
                 }
             }
             HorizontalDivider()
         }
-
         // Notification Settings Section
         val reminderMinutes by viewModel.reminderMinutes.collectAsState()
         val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
