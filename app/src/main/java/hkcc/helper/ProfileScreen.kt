@@ -375,9 +375,9 @@ fun ProfileScreen(
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("0m", style = MaterialTheme.typography.labelSmall)
-                        Text("15m", style = MaterialTheme.typography.labelSmall)
                         Text("30m", style = MaterialTheme.typography.labelSmall)
                         Text("60m", style = MaterialTheme.typography.labelSmall)
+                        Text("85m", style = MaterialTheme.typography.labelSmall)
                         Text("120m", style = MaterialTheme.typography.labelSmall)
                     }
                 } else {
