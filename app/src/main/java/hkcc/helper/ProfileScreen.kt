@@ -377,7 +377,7 @@ fun ProfileScreen(
                         Text("0m", style = MaterialTheme.typography.labelSmall)
                         Text("30m", style = MaterialTheme.typography.labelSmall)
                         Text("60m", style = MaterialTheme.typography.labelSmall)
-                        Text("85m", style = MaterialTheme.typography.labelSmall)
+                        Text("90m", style = MaterialTheme.typography.labelSmall)
                         Text("120m", style = MaterialTheme.typography.labelSmall)
                     }
                 } else {
