@@ -374,11 +374,11 @@ fun ProfileScreen(
                         steps = 23
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("0m", style = MaterialTheme.typography.labelSmall)
-                        Text("30m", style = MaterialTheme.typography.labelSmall)
-                        Text("60m", style = MaterialTheme.typography.labelSmall)
-                        Text("90m", style = MaterialTheme.typography.labelSmall)
-                        Text("120m", style = MaterialTheme.typography.labelSmall)
+                        Text("0mins", style = MaterialTheme.typography.labelSmall)
+                        Text("30mins", style = MaterialTheme.typography.labelSmall)
+                        Text("60mins", style = MaterialTheme.typography.labelSmall)
+                        Text("90mins", style = MaterialTheme.typography.labelSmall)
+                        Text("120mins", style = MaterialTheme.typography.labelSmall)
                     }
                 } else {
                     Text("Notifications are currently disabled.", style = MaterialTheme.typography.bodySmall)
