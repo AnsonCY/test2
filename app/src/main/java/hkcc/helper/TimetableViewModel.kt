@@ -105,7 +105,7 @@ class TimetableViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         viewModelScope.launch {
-            loadFromDisk() // Suspend until data is fully loaded
+            loadFromDisk()
             isLoaded = true
             loadStudyPatterns()
         }

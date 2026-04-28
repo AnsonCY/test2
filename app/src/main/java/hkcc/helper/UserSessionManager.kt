@@ -31,7 +31,7 @@ class UserSessionManager(context: Context) {
     }
 
     fun hasCompleteProfile(): Boolean {
-        // Name is NOT required - only contact info is required
+        // Name is NOT required, only contact info is required
         return hasContactInfo()
     }
 
