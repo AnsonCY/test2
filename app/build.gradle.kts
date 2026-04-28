@@ -17,7 +17,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Add these for Supabase
+        // Supabase
         buildConfigField("String", "SUPABASE_URL", "\"https://hwzztdpusrlntnjhdsop.supabase.co\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"sb_publishable_QocrPjKbu2Sk07WkiGAn4g_kW1wNiIH\"")
     }
@@ -53,18 +53,16 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
-    // Supabase - Use version 2.0.0 or higher
+    // Supabase
     implementation("io.github.jan-tennert.supabase:postgrest-kt:3.1.1")
     implementation("io.github.jan-tennert.supabase:realtime-kt:3.1.1")
 
-    // Ktor - Use version 3.0.0 for better compatibility
     implementation("io.ktor:ktor-client-core:3.0.0")
     implementation("io.ktor:ktor-client-android:3.0.0")
     implementation("io.ktor:ktor-client-logging:3.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
 
-    // Add SLF4J for logging
     implementation("org.slf4j:slf4j-simple:2.0.9")
 
     testImplementation(libs.junit)

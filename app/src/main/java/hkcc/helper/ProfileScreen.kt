@@ -127,7 +127,7 @@ fun ProfileScreen(
                             val hasContactInfo = studentId.isNotBlank() || phoneNumber.isNotBlank()
 
                             if (hasContactInfo) {
-                                // Name can be blank - use Student ID as fallback display name if name is empty
+                                // Name can be blank
                                 val finalName = userName.ifBlank {
                                     if (studentId.isNotBlank()) "Student $studentId" else "HKCC Student"
                                 }
@@ -458,7 +458,7 @@ fun DropdownSelector(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
-                // Fix: Added MenuAnchorType.PrimaryNotEditable
+                // MenuAnchorType.PrimaryNotEditable
                 .menuAnchor(type = MenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
         )

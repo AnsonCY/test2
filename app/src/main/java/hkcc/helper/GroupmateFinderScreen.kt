@@ -88,7 +88,7 @@ fun GroupmateFinderScreen(
         .distinctBy { "${it.code}-${it.classNo}-${it.type}" }
         .sortedBy { it.code }
 
-    // Show found invitations dialog
+    // Show found invitations
     if (showInvitationsDialog && courseInvitations.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = {
@@ -127,7 +127,7 @@ fun GroupmateFinderScreen(
         )
     }
 
-    // Create invitation dialog
+    // Create invitation
     if (showCreateDialog && selectedSubject != null) {
         val subject = selectedSubject!!
         AlertDialog(
@@ -199,7 +199,7 @@ fun GroupmateFinderScreen(
         )
     }
 
-    // Show success/error snackbar
+    // Show success/error
     LaunchedEffect(Unit) {
         scope.launch {
             viewModel.successMessage.collect { message ->
@@ -214,7 +214,7 @@ fun GroupmateFinderScreen(
         viewModel.loadMyInvitations()
     }
 
-    // Show dialog when course invitations are found
+    // Show invitation when course invitations are found
     LaunchedEffect(courseInvitations) {
         if (courseInvitations.isNotEmpty()) {
             showInvitationsDialog = true
@@ -248,8 +248,7 @@ fun GroupmateFinderScreen(
                 )
             }
 
-            // Profile info card - Display only, no edit
-            // Profile info card - Display only, no edit
+            // Profile info card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -558,7 +557,7 @@ fun FoundGroupmateCard(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Email - Display Only (No Button)
+                    // Email
                     if (invitation.studentEmail.isNotBlank()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -585,7 +584,7 @@ fun FoundGroupmateCard(
                         }
                     }
 
-                    // Phone - With Call Button
+                    // Phone
                     if (invitation.phoneNumber.isNotBlank()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
